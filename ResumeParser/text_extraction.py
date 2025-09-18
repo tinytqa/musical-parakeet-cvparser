@@ -13,7 +13,11 @@ from text_processing import process_text_ocr
 from prompt import post_parse_cv, prompt_to_parse_cv
 
 import google.generativeai as genai 
-from api_key import api_key
+from dotenv import load_dotenv
+load_dotenv()
+
+# Lấy API_KEY ra dùng
+api_key = os.getenv("api_key")
 
 genai.configure(api_key=api_key)
 
@@ -114,7 +118,7 @@ def extract_text_from_file(file_bytes: bytes, filename: str, postprocess: bool =
             response = genai.GenerativeModel("gemini-2.5-flash").generate_content(prompt)
             
             parsed_json = post_parse_cv(response.text)
-
+            print (parsed_json)
             return parsed_json
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"LLM JSON parse failed: {e}")

@@ -82,134 +82,54 @@ def infer_more_skills():
     st.session_state['new_skills'] = new_skills
 
 
-# def display_file(file_bytes: bytes, file_type: str):
-#     """
-#     Hiển thị file PDF hoặc DOCX trong Streamlit và lưu vào thư mục output/cv_candidate_name
-#     """
-#     # Lấy tên ứng viên từ session (nếu chưa có hoặc None thì = "unknown")
-#     candidate_name = st.session_state.get("candidate_name") or "unknown"
-#     candidate_name = str(candidate_name).replace(" ", "_")
-
-#     output_dir = os.path.join("output", f"cv_{candidate_name}")
-#     os.makedirs(output_dir, exist_ok=True)
-
-#     if file_type.lower() == 'pdf':
-#         doc = fitz.open(stream=file_bytes, filetype="pdf")
-#         image_paths = []
-#         for i, page in enumerate(doc):
-#             pix = page.get_pixmap(dpi=300)
-#             output_path = os.path.join(output_dir, f"page_{i+1}.png")
-#             pix.save(output_path)
-#             image_paths.append(output_path)
-#         doc.close()
-#         st.image(image_paths)
-
-#     elif file_type.lower() == 'docx':
-#         doc = Document(io.BytesIO(file_bytes))
-#         parts = []
-
-#         for para in doc.paragraphs:
-#             text_content = para.text.strip()
-#             if not text_content:
-#                 continue
-
-#             style = para.style.name if para.style else ""
-
-#             if style.startswith("Heading"):
-#                 # Heading -> hiển thị dạng Markdown
-#                 level = style.replace("Heading", "").strip()
-#                 level = int(level) if level.isdigit() else 1
-#                 parts.append(f"{'#' * level} {text_content}")
-
-#             elif "List Bullet" in style or "List Number" in style:
-#                 # Bullet list
-#                 parts.append(f"- {text_content}")
-
-#             else:
-#                 parts.append(text_content)
-
-#         formatted_text = "\n".join(parts)
-
-#         # Lưu text có format
-#         txt_path = os.path.join(output_dir, "document.txt")
-#         with open(txt_path, "w", encoding="utf-8") as f:
-#             f.write(formatted_text)
-
-#         # Dùng markdown để hiển thị heading + bullet rõ ràng
-#         st.markdown(formatted_text)
-
-#     else:
-#         st.warning("File type is not supported.")
-
-#     st.session_state['uploaded'] = True
-
-
 
 def display_file(file_bytes: bytes, file_type: str):
     """
-    Hiển thị file PDF hoặc DOCX trong Streamlit và lưu vào thư mục output/cv_candidate_name
+    Chỉ hiển thị file PDF hoặc DOCX trong Streamlit (preview),
+    không lưu vào thư mục output.
     """
-    candidate_name = st.session_state.get("candidate_name") or "unknown"
-    candidate_name = str(candidate_name).replace(" ", "_")
-
-    output_dir = os.path.join("output", f"cv_{candidate_name}")
-    os.makedirs(output_dir, exist_ok=True)
-
     if file_type.lower() == 'pdf':
         doc = fitz.open(stream=file_bytes, filetype="pdf")
-        image_paths = []
+        image_list = []
         for i, page in enumerate(doc):
             pix = page.get_pixmap(dpi=300)
-            output_path = os.path.join(output_dir, f"page_{i+1}.png")
-            pix.save(output_path)
-            image_paths.append(output_path)
+            img_bytes = pix.tobytes("png")  # chỉ giữ ảnh trong memory
+            image_list.append(img_bytes)
         doc.close()
-        st.image(image_paths)
+        st.image(image_list)
 
     elif file_type.lower() == 'docx':
         doc = Document(io.BytesIO(file_bytes))
         parts = []
 
-        # ===== Paragraphs =====
         for para in doc.paragraphs:
             text_content = para.text.strip()
             if not text_content:
                 continue
 
             style = para.style.name if para.style else ""
-
             if style.startswith("Heading"):
                 level = style.replace("Heading", "").strip()
                 level = int(level) if level.isdigit() else 1
                 parts.append(f"{'#' * level} {text_content}")
-
             elif "List Bullet" in style or "List Number" in style:
                 parts.append(f"- {text_content}")
-
             else:
                 parts.append(text_content)
 
-        # ===== Tables =====
         for table in doc.tables:
             for row in table.rows:
                 row_text = [cell.text.strip() for cell in row.cells if cell.text.strip()]
                 if row_text:
-                    parts.append(" | ".join(row_text))  # hiển thị dạng bảng
+                    parts.append(" | ".join(row_text))
 
         formatted_text = "\n".join(parts)
-
-        # Lưu text có format
-        txt_path = os.path.join(output_dir, "document.txt")
-        with open(txt_path, "w", encoding="utf-8") as f:
-            f.write(formatted_text)
-
         st.markdown(formatted_text)
 
     else:
         st.warning("File type is not supported.")
 
     st.session_state['uploaded'] = True
-
 
 
 def reset_description(i): # reset về nguyên gốc ban đầu 
@@ -223,61 +143,207 @@ def reset_resp(i):
     st.session_state[f"work_responsibilities_{i}"] = resps_str
     st.toast('Responsibilities restored.', icon='🔄')
 
-def submit_form(): # lấy dữ liệu đã được AI xử lý --> lưu ra file json hoàn chỉnh (bản json final)
+# def submit_form(): # lấy dữ liệu đã được AI xử lý --> lưu ra file json hoàn chỉnh (bản json final)
+#     export_work_exp = []
+#     for i in range(len(autofilled_work_exp)):
+#         ewe = {
+#             "work_timeline": [st.session_state[f"work_timeline_from_{i}"], st.session_state[f"work_timeline_to_{i}"]],
+#             "work_company": st.session_state[f"work_company_{i}"],
+#             "work_title": st.session_state[f"work_title_{i}"],
+#             "work_description": st.session_state[f"work_description_{i}"],
+#             "work_responsibilities": [c[2:] for c in st.session_state[f"work_responsibilities_{i}"].split('\n')],
+#             "work_technologies": st.session_state[f"work_technologies_{i}"]
+#         }
+#         export_work_exp.append(ewe)
+    
+#     export_education = []
+#     for i in range(len(autofilled_edus)):
+#         ee = {
+#             "edu_timeline": [st.session_state[f"edu_timeline_from_{i}"], st.session_state[f"edu_timeline_to_{i}"]],
+#             "edu_school": st.session_state[f"edu_school_{i}"],
+#             "edu_degree": st.session_state[f"edu_degree_{i}"],
+#             "edu_gpa": st.session_state[f"edu_gpa_{i}"],
+#             "edu_description": st.session_state[f"edu_description_{i}"],
+#         }
+#         export_education.append(ee)
+    
+#     export_projects = []
+#     for i in range(len(autofilled_projects)):
+#         ep = {
+#             "project_timeline": [st.session_state[f"project_timeline_from_{i}"], st.session_state[f"project_timeline_to_{i}"]],
+#             "project_name": st.session_state[f"project_name_{i}"],
+#             "project_description": st.session_state[f"project_description_{i}"],
+#             "project_responsibilities": [c[2:] for c in st.session_state[f"project_responsibilities_{i}"].split('\n')],
+#             "project_technologies": st.session_state[f"project_technologies_{i}"]
+#         }
+#         export_projects.append(ep)
+    
+#     export_skills = []
+#     for i in range(len(autofilled_skills)):
+#         es = {
+#             "skill_name": st.session_state[f"skill_name_{i}"],
+#         }
+#         export_skills.append(es)
+#     for i in range(len(autofilled_skills)):
+#         es = {
+#             "skill_name": st.session_state[f"skill_name_{i}"],
+#         }
+#         export_skills.append(es)
+
+#     export_languages = []
+#     for i in range(len(autofilled_languages)):
+#         el = {
+#             "lang": st.session_state[f"lang_{i}"],
+#             "lang_lvl": st.session_state[f"lang_lvl_{i}"],
+#         }
+#         export_languages.append(el)    
+
+#     export = {
+#         "candidate_name": st.session_state.candidate_name,
+#         "candidate_title": st.session_state.candidate_title,
+#         "summary": st.session_state.summary,
+#         "links": st.session_state.links.split('\n'),
+#         "languages": export_languages,
+#         "work_exp": export_work_exp,
+#         "education": export_education,
+#         "projects": export_projects,
+#         "certifications": st.session_state.certifications.split('\n'),
+#         "skills": export_skills
+#     }
+
+#     # Lưu vào session
+#     st.session_state['output_json'] = export
+
+#     candidate_name = export["candidate_name"].replace(" ", "_") or "unknown"
+
+#     output_dir = os.path.join("output", f"cv_{candidate_name}")
+#     if os.path.exists(output_dir):
+#         try:
+#             shutil.rmtree(output_dir)  # xóa cả thư mục cũ
+#         except PermissionError:
+#             st.warning(f"Không thể xóa folder cũ: {output_dir}, có thể đang mở ở nơi khác!")
+
+#     os.makedirs(output_dir, exist_ok=True)
+
+#     # Tạo folder riêng cho từng ứng viên
+#     output_dir = os.path.join("output", f"cv_{candidate_name}")
+#     os.makedirs(output_dir, exist_ok=True)
+    
+#     # Lưu JSON
+#     with open(os.path.join(output_dir, "export_resume.json"), "w", encoding="utf-8") as f:
+#         json.dump(export, f, ensure_ascii=False, indent=4)
+
+#     # Lưu TXT (phiên bản text đơn giản)
+#     txt_path = os.path.join(output_dir, "export_resume.txt")
+#     with open(txt_path, "w", encoding="utf-8") as f:
+#         f.write(f"Name: {export['candidate_name']}\n")
+#         f.write(f"Title: {export['candidate_title']}\n\n")
+#         f.write("Summary:\n" + export["summary"] + "\n\n")
+        
+#         f.write("Links:\n" + "\n".join(export["links"]) + "\n\n")
+        
+#         f.write("Languages:\n")
+#         for lang in export["languages"]:
+#             f.write(f"- {lang['lang']} ({lang['lang_lvl']})\n")
+#         f.write("\n")
+
+#         f.write("Work Experience:\n")
+#         for we in export["work_exp"]:
+#             f.write(f"- {we}\n")
+#         f.write("\n")
+
+#         f.write("Education:\n")
+#         for edu in export["education"]:
+#             f.write(f"- {edu}\n")
+#         f.write("\n")
+
+#         f.write("Projects:\n")
+#         for proj in export["projects"]:
+#             f.write(f"- {proj}\n")
+#         f.write("\n")
+
+#         f.write("Certifications:\n" + "\n".join(export["certifications"]) + "\n\n")
+#         f.write("Skills:\n")
+
+#         for skill in export["skills"]:
+#             if isinstance(skill, dict):
+#                 # nếu skill lưu dạng dict
+#                 skill_name = skill.get("skill_name")
+#                 f.write(f"- {skill_name}\n")
+
+
+#     st.toast("Form submitted and files saved!", icon="🎯")
+
+def submit_form(uploaded_file_bytes=None, uploaded_file_type=None):
+    """
+    Lấy dữ liệu từ session --> lưu ra JSON + TXT + ảnh (nếu có)
+    """
+    # ===== Work Experience =====
     export_work_exp = []
     for i in range(len(autofilled_work_exp)):
         ewe = {
-            "work_timeline": [st.session_state[f"work_timeline_from_{i}"], st.session_state[f"work_timeline_to_{i}"]],
+            "work_timeline": [
+                st.session_state[f"work_timeline_from_{i}"],
+                st.session_state[f"work_timeline_to_{i}"]
+            ],
             "work_company": st.session_state[f"work_company_{i}"],
             "work_title": st.session_state[f"work_title_{i}"],
             "work_description": st.session_state[f"work_description_{i}"],
-            "work_responsibilities": [c[2:] for c in st.session_state[f"work_responsibilities_{i}"].split('\n')],
+            "work_responsibilities": [
+                c[2:] for c in st.session_state[f"work_responsibilities_{i}"].split('\n')
+            ],
             "work_technologies": st.session_state[f"work_technologies_{i}"]
         }
         export_work_exp.append(ewe)
-    
+
+    # ===== Education =====
     export_education = []
     for i in range(len(autofilled_edus)):
         ee = {
-            "edu_timeline": [st.session_state[f"edu_timeline_from_{i}"], st.session_state[f"edu_timeline_to_{i}"]],
+            "edu_timeline": [
+                st.session_state[f"edu_timeline_from_{i}"],
+                st.session_state[f"edu_timeline_to_{i}"]
+            ],
             "edu_school": st.session_state[f"edu_school_{i}"],
             "edu_degree": st.session_state[f"edu_degree_{i}"],
             "edu_gpa": st.session_state[f"edu_gpa_{i}"],
             "edu_description": st.session_state[f"edu_description_{i}"],
         }
         export_education.append(ee)
-    
+
+    # ===== Projects =====
     export_projects = []
     for i in range(len(autofilled_projects)):
         ep = {
-            "project_timeline": [st.session_state[f"project_timeline_from_{i}"], st.session_state[f"project_timeline_to_{i}"]],
+            "project_timeline": [
+                st.session_state[f"project_timeline_from_{i}"],
+                st.session_state[f"project_timeline_to_{i}"]
+            ],
             "project_name": st.session_state[f"project_name_{i}"],
             "project_description": st.session_state[f"project_description_{i}"],
-            "project_responsibilities": [c[2:] for c in st.session_state[f"project_responsibilities_{i}"].split('\n')],
+            "project_responsibilities": [
+                c[2:] for c in st.session_state[f"project_responsibilities_{i}"].split('\n')
+            ],
             "project_technologies": st.session_state[f"project_technologies_{i}"]
         }
         export_projects.append(ep)
-    
+
+    # ===== Skills =====
     export_skills = []
     for i in range(len(autofilled_skills)):
-        es = {
-            "skill_name": st.session_state[f"skill_name_{i}"],
-        }
-        export_skills.append(es)
-    for i in range(len(autofilled_skills)):
-        es = {
-            "skill_name": st.session_state[f"skill_name_{i}"],
-        }
+        es = {"skill_name": st.session_state[f"skill_name_{i}"]}
         export_skills.append(es)
 
+    # ===== Languages =====
     export_languages = []
     for i in range(len(autofilled_languages)):
         el = {
             "lang": st.session_state[f"lang_{i}"],
             "lang_lvl": st.session_state[f"lang_lvl_{i}"],
         }
-        export_languages.append(el)    
+        export_languages.append(el)
 
+    # ===== Final Export =====
     export = {
         "candidate_name": st.session_state.candidate_name,
         "candidate_title": st.session_state.candidate_title,
@@ -291,37 +357,33 @@ def submit_form(): # lấy dữ liệu đã được AI xử lý --> lưu ra fil
         "skills": export_skills
     }
 
-    # Lưu vào session
     st.session_state['output_json'] = export
 
+    # ===== Tạo folder output =====
     candidate_name = export["candidate_name"].replace(" ", "_") or "unknown"
-
     output_dir = os.path.join("output", f"cv_{candidate_name}")
+
     if os.path.exists(output_dir):
         try:
-            shutil.rmtree(output_dir)  # xóa cả thư mục cũ
+            shutil.rmtree(output_dir)
         except PermissionError:
             st.warning(f"Không thể xóa folder cũ: {output_dir}, có thể đang mở ở nơi khác!")
 
     os.makedirs(output_dir, exist_ok=True)
 
-    # Tạo folder riêng cho từng ứng viên
-    output_dir = os.path.join("output", f"cv_{candidate_name}")
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Lưu JSON
+    # ===== Lưu JSON =====
     with open(os.path.join(output_dir, "export_resume.json"), "w", encoding="utf-8") as f:
         json.dump(export, f, ensure_ascii=False, indent=4)
 
-    # Lưu TXT (phiên bản text đơn giản)
+    # ===== Lưu TXT đơn giản =====
     txt_path = os.path.join(output_dir, "export_resume.txt")
     with open(txt_path, "w", encoding="utf-8") as f:
         f.write(f"Name: {export['candidate_name']}\n")
         f.write(f"Title: {export['candidate_title']}\n\n")
         f.write("Summary:\n" + export["summary"] + "\n\n")
-        
+
         f.write("Links:\n" + "\n".join(export["links"]) + "\n\n")
-        
+
         f.write("Languages:\n")
         for lang in export["languages"]:
             f.write(f"- {lang['lang']} ({lang['lang_lvl']})\n")
@@ -343,14 +405,20 @@ def submit_form(): # lấy dữ liệu đã được AI xử lý --> lưu ra fil
         f.write("\n")
 
         f.write("Certifications:\n" + "\n".join(export["certifications"]) + "\n\n")
-        f.write("Skills:\n")
 
+        f.write("Skills:\n")
         for skill in export["skills"]:
             if isinstance(skill, dict):
-                # nếu skill lưu dạng dict
-                skill_name = skill.get("skill_name")
-                f.write(f"- {skill_name}\n")
+                f.write(f"- {skill.get('skill_name')}\n")
 
+    # ===== Nếu file gốc là PDF thì lưu thêm ảnh từng trang =====
+    if uploaded_file_bytes and uploaded_file_type and uploaded_file_type.lower() == "pdf":
+        doc = fitz.open(stream=uploaded_file_bytes, filetype="pdf")
+        for i, page in enumerate(doc):
+            pix = page.get_pixmap(dpi=200)
+            img_path = os.path.join(output_dir, f"page_{i+1}.png")
+            pix.save(img_path)
+        doc.close()
 
     st.toast("Form submitted and files saved!", icon="🎯")
 

@@ -1,6 +1,6 @@
 import google.generativeai as genai
 import streamlit as st
-from api_key import api_key
+
 
 def call_gemini(prompt: str) -> str:
     """Gọi Gemini 2.5 để sinh text từ prompt."""
