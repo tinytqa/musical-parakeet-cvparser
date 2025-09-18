@@ -1,0 +1,20 @@
+# Bỏ qua file api_key
+api_key.py
+
+
+# Bỏ qua môi trường ảo Python
+venv/
+.env
+
+# Bỏ qua folder output
+output/
+
+# Bỏ qua cache và log
+__pycache__/
+*.pyc
+*.pyo
+*.log
+
+# Bỏ qua file của IDE
+.vscode/
+.idea/

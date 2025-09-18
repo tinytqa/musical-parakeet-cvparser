@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume Parser System</title>
+    <link href = "styles.css" rel = "stylesheet">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Resume Parser System</h1>
+            <p>Upload CV and extract information in a smart way</p>
+        </div>
+
+        <div class="main-content">
+            <div class="upload-section">
+                <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
+                    <div class="upload-icon">📄</div>
+                    <div class="upload-text">
+                        <strong>Upload CV here</strong><br>
+                       or click to choose file
+                    </div>
+                    <div class="file-info">
+                        Support: PDF, DOC, DOCX (10MB Maximum)
+                    </div>
+                </div>
+                <input type="file" id="fileInput" accept=".pdf,.doc,.docx" />
+                <button class="btn" id="uploadBtn" onclick="uploadFile()" disabled>
+                    Analyze CV
+                </button>
+                <div id="uploadStatus"></div>
+            </div>
+
+            <div class="results-section">
+                <div class="results-header">
+                    <h3>📋 Candidate's information</h3>
+                </div>
+                <div class="results-content" id="resultsContent">
+                    <div style="text-align: center; color: #a0aec0; padding: 60px 20px;">
+                        <div style="font-size: 3em; margin-bottom: 20px;">🎯</div>
+                        <p>Upload CV to start analyzing</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedFile = null;
+        const baseurl = "http://127.0.0.1:8000"
+        // Xử lý chọn file
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            selectedFile = e.target.files[0];
+            if (selectedFile) {
+                document.getElementById('uploadBtn').disabled = false;
+                const uploadZone = document.querySelector('.upload-zone');
+                uploadZone.innerHTML = `
+                    <div class="upload-icon">✅</div>
+                    <div class="upload-text">
+                        <strong>${selectedFile.name}</strong><br>
+                        ${(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                    </div>
+                    <div class="file-info">
+                        Click "Analyze CV" to start
+                    </div>
+                `;
+            }
+        });
+
+        // Xử lý drag and drop
+        const uploadSection = document.querySelector('.upload-section');
+        
+        uploadSection.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.style.borderColor = '#4facfe';
+            this.style.background = '#f0f9ff';
+        });
+
+        uploadSection.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            this.style.borderColor = '#cbd5e0';
+            this.style.background = '#f8fafc';
+        });
+
+        uploadSection.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.style.borderColor = '#cbd5e0';
+            this.style.background = '#f8fafc';
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                selectedFile = files[0];
+                document.getElementById('fileInput').files = files;
+                document.getElementById('uploadBtn').disabled = false;
+                
+                const uploadZone = document.querySelector('.upload-zone');
+                uploadZone.innerHTML = `
+                    <div class="upload-icon">✅</div>
+                    <div class="upload-text">
+                        <strong>${selectedFile.name}</strong><br>
+                        ${(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                    </div>
+                    <div class="file-info">
+                        Click "Analyze CV" to start
+                    </div>
+                `;
+            }
+        });
+
+        // Upload file và parse
+        async function uploadFile() {
+            if (!selectedFile) return;
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            // Hiện loading
+            document.getElementById('resultsContent').innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Analyzing CV... Please wait</p>
+                </div>
+            `;
+            
+            try {
+                const response = await fetch(`${baseurl}/parse-resume`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    displayResults(result.parsed_result);
+                    document.getElementById('uploadStatus').innerHTML = 
+                        '<div class="success">✅ Successfully analyzing the CV!</div>';
+                } else {
+                    throw new Error(result.detail || 'Có lỗi xảy ra');
+                }
+            } catch (error) {
+                document.getElementById('resultsContent').innerHTML = `
+                    <div class="error">
+                        ❌ Lỗi: ${error.message}
+                    </div>
+                `;
+                document.getElementById('uploadStatus').innerHTML = 
+                    `<div class="error">❌ ${error.message}</div>`;
+            }
+        }
+
+        // Hiển thị kết quả parse
+        function displayResults(data) {
+            const content = document.getElementById('resultsContent');
+            
+            let html = `
+                <div class="section-title">👤 Information</div>
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" class="form-control" value="${data.candidate_name || ''}" placeholder="Please enter name">
+                </div>
+                <div class="form-group">
+                    <label>Applied Position</label>
+                    <input type="text" class="form-control" value="${data.candidate_title || ''}" placeholder="Applied Position">
+                </div>
+                <div class="form-group">
+                    <label>Personal Sumary</label>
+                    <textarea class="form-control" placeholder="Candidate description">${data.summary || ''}</textarea>
+                </div>
+            `;
+
+            // Ngôn ngữ
+            if (data.languages && data.languages.length > 0) {
+                html += `
+                    <div class="section-title">🌐 Languages</div>
+                `;
+                data.languages.forEach((lang, index) => {
+                    html += `
+                        <div class="form-group">
+                            <label>Languages ${index + 1}</label>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                <input type="text" class="form-control" value="${lang.lang || ''}" placeholder="Language">
+                                <input type="text" class="form-control" value="${lang.lang_lvl || ''}" placeholder="Level">
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            // Học vấn
+            if (data.education && data.education.length > 0) {
+                html += `<div class="section-title">🎓 Education</div>`;
+                data.education.forEach((edu, index) => {
+                    html += `
+                        <div class="education-item">
+                            <div class="form-group">
+                                <label>School/University</label>
+                                <input type="text" class="form-control" value="${edu.edu_school || ''}" placeholder="School">
+                            </div>
+                            <div class="form-group">
+                                <label>Degree</label>
+                                <input type="text" class="form-control" value="${edu.edu_degree || ''}" placeholder="Degree">
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                <div class="form-group">
+                                    <label>Period</label>
+                                    <input type="text" class="form-control" value="${edu.edu_timeline ? edu.edu_timeline.join(' - ') : ''}" placeholder="2020 - 2024">
+                                </div>
+                                <div class="form-group">
+                                    <label>GPA</label>
+                                    <input type="text" class="form-control" value="${edu.edu_gpa || ''}" placeholder="3.5">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Description</label>
+                                <textarea class="form-control" placeholder="Detailed description">${edu.edu_description || ''}</textarea>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            // Kinh nghiệm làm việc
+            if (data.work_exp && data.work_exp.length > 0) {
+                html += `<div class="section-title">💼 Experience</div>`;
+                data.work_exp.forEach((work, index) => {
+                    html += `
+                        <div class="work-item">
+                            <div class="form-group">
+                                <label>Company</label>
+                                <input type="text" class="form-control" value="${work.company || ''}" placeholder="Company name">
+                            </div>
+                            <div class="form-group">
+                                <label>Position</label>
+                                <input type="text" class="form-control" value="${work.position || ''}" placeholder="Position">
+                            </div>
+                            <div class="form-group">
+                                <label>Period</label>
+                                <input type="text" class="form-control" value="${work.timeline ? work.timeline.join(' - ') : ''}" placeholder="01/2022 - 12/2023">
+                            </div>
+                            <div class="form-group">
+                                <label>work Description</label>
+                                <textarea class="form-control" placeholder="Work description">${work.description || ''}</textarea>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            // Dự án
+            if (data.projects && data.projects.length > 0) {
+                html += `<div class="section-title">🚀 Projects</div>`;
+                data.projects.forEach((project, index) => {
+                    html += `
+                        <div class="project-item">
+                            <div class="form-group">
+                                <label>Project's name</label>
+                                <input type="text" class="form-control" value="${project.project_name || ''}" placeholder="Project's name">
+                            </div>
+                            <div class="form-group">
+                                <label>Period</label>
+                                <input type="text" class="form-control" value="${project.project_timeline ? project.project_timeline.join(' - ') : ''}" placeholder="2024 - 2024">
+                            </div>
+                            <div class="form-group">
+                                <label>Technologies Used</label>
+                                <input type="text" class="form-control" value="${project.project_technologies || ''}" placeholder="Python, React, Node.js">
+                            </div>
+                            <div class="form-group">
+                                <label>Project description</label>
+                                <textarea class="form-control" placeholder="Project description">${project.project_description || ''}</textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Responsibilities</label>
+                                <textarea class="form-control" placeholder="Responsibilites in the project">${project.project_responsibilities ? project.project_responsibilities.join('\n') : ''}</textarea>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            // Chứng chỉ
+            if (data.certifications && data.certifications.length > 0) {
+                html += `
+                    <div class="section-title">🏆 Certifications</div>
+                    <div class="form-group">
+                        <label>Certifications</label>
+                        <textarea class="form-control" placeholder="Certifications">${data.certifications.join('\n')}</textarea>
+                    </div>
+                `;
+            }
+
+            // Kỹ năng
+            if (data.skills && data.skills.length > 0) {
+                html += `<div class="section-title">💻 Skills</div>`;
+                const skillsText = data.skills.map(skill => skill.skill_name || skill).join(', ');
+                html += `
+                    <div class="form-group">
+                        <label>Skills</label>
+                        <textarea class="form-control" placeholder="Skills">${skillsText}</textarea>
+                        <div class="skills-container">
+                            ${data.skills.map(skill => `<span class="skill-tag">${skill.skill_name || skill}</span>`).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            content.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
