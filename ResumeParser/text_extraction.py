@@ -50,11 +50,7 @@ def extract_text_from_file(file_bytes: bytes, filename: str, postprocess: bool =
         formatted_text = "\n".join(parts)
 
         # Lưu ra file txt
-        txt_path = os.path.join("output", "document.txt")
-        os.makedirs("output", exist_ok=True)
-        with open(txt_path, "w", encoding="utf-8") as f:
-            f.write(formatted_text)
-
+    
         text = formatted_text
 
     # ----------- PDF -----------
@@ -118,7 +114,7 @@ def extract_text_from_file(file_bytes: bytes, filename: str, postprocess: bool =
             response = genai.GenerativeModel("gemini-2.5-flash").generate_content(prompt)
             
             parsed_json = post_parse_cv(response.text)
-            print (parsed_json)
+            #print (parsed_json)
             return parsed_json
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"LLM JSON parse failed: {e}")

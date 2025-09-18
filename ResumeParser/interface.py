@@ -125,7 +125,7 @@ def display_file(file_bytes: bytes, file_type: str):
 
         formatted_text = "\n".join(parts)
         st.markdown(formatted_text)
-
+        
     else:
         st.warning("File type is not supported.")
 
@@ -143,141 +143,15 @@ def reset_resp(i):
     st.session_state[f"work_responsibilities_{i}"] = resps_str
     st.toast('Responsibilities restored.', icon='🔄')
 
-# def submit_form(): # lấy dữ liệu đã được AI xử lý --> lưu ra file json hoàn chỉnh (bản json final)
-#     export_work_exp = []
-#     for i in range(len(autofilled_work_exp)):
-#         ewe = {
-#             "work_timeline": [st.session_state[f"work_timeline_from_{i}"], st.session_state[f"work_timeline_to_{i}"]],
-#             "work_company": st.session_state[f"work_company_{i}"],
-#             "work_title": st.session_state[f"work_title_{i}"],
-#             "work_description": st.session_state[f"work_description_{i}"],
-#             "work_responsibilities": [c[2:] for c in st.session_state[f"work_responsibilities_{i}"].split('\n')],
-#             "work_technologies": st.session_state[f"work_technologies_{i}"]
-#         }
-#         export_work_exp.append(ewe)
-    
-#     export_education = []
-#     for i in range(len(autofilled_edus)):
-#         ee = {
-#             "edu_timeline": [st.session_state[f"edu_timeline_from_{i}"], st.session_state[f"edu_timeline_to_{i}"]],
-#             "edu_school": st.session_state[f"edu_school_{i}"],
-#             "edu_degree": st.session_state[f"edu_degree_{i}"],
-#             "edu_gpa": st.session_state[f"edu_gpa_{i}"],
-#             "edu_description": st.session_state[f"edu_description_{i}"],
-#         }
-#         export_education.append(ee)
-    
-#     export_projects = []
-#     for i in range(len(autofilled_projects)):
-#         ep = {
-#             "project_timeline": [st.session_state[f"project_timeline_from_{i}"], st.session_state[f"project_timeline_to_{i}"]],
-#             "project_name": st.session_state[f"project_name_{i}"],
-#             "project_description": st.session_state[f"project_description_{i}"],
-#             "project_responsibilities": [c[2:] for c in st.session_state[f"project_responsibilities_{i}"].split('\n')],
-#             "project_technologies": st.session_state[f"project_technologies_{i}"]
-#         }
-#         export_projects.append(ep)
-    
-#     export_skills = []
-#     for i in range(len(autofilled_skills)):
-#         es = {
-#             "skill_name": st.session_state[f"skill_name_{i}"],
-#         }
-#         export_skills.append(es)
-#     for i in range(len(autofilled_skills)):
-#         es = {
-#             "skill_name": st.session_state[f"skill_name_{i}"],
-#         }
-#         export_skills.append(es)
-
-#     export_languages = []
-#     for i in range(len(autofilled_languages)):
-#         el = {
-#             "lang": st.session_state[f"lang_{i}"],
-#             "lang_lvl": st.session_state[f"lang_lvl_{i}"],
-#         }
-#         export_languages.append(el)    
-
-#     export = {
-#         "candidate_name": st.session_state.candidate_name,
-#         "candidate_title": st.session_state.candidate_title,
-#         "summary": st.session_state.summary,
-#         "links": st.session_state.links.split('\n'),
-#         "languages": export_languages,
-#         "work_exp": export_work_exp,
-#         "education": export_education,
-#         "projects": export_projects,
-#         "certifications": st.session_state.certifications.split('\n'),
-#         "skills": export_skills
-#     }
-
-#     # Lưu vào session
-#     st.session_state['output_json'] = export
-
-#     candidate_name = export["candidate_name"].replace(" ", "_") or "unknown"
-
-#     output_dir = os.path.join("output", f"cv_{candidate_name}")
-#     if os.path.exists(output_dir):
-#         try:
-#             shutil.rmtree(output_dir)  # xóa cả thư mục cũ
-#         except PermissionError:
-#             st.warning(f"Không thể xóa folder cũ: {output_dir}, có thể đang mở ở nơi khác!")
-
-#     os.makedirs(output_dir, exist_ok=True)
-
-#     # Tạo folder riêng cho từng ứng viên
-#     output_dir = os.path.join("output", f"cv_{candidate_name}")
-#     os.makedirs(output_dir, exist_ok=True)
-    
-#     # Lưu JSON
-#     with open(os.path.join(output_dir, "export_resume.json"), "w", encoding="utf-8") as f:
-#         json.dump(export, f, ensure_ascii=False, indent=4)
-
-#     # Lưu TXT (phiên bản text đơn giản)
-#     txt_path = os.path.join(output_dir, "export_resume.txt")
-#     with open(txt_path, "w", encoding="utf-8") as f:
-#         f.write(f"Name: {export['candidate_name']}\n")
-#         f.write(f"Title: {export['candidate_title']}\n\n")
-#         f.write("Summary:\n" + export["summary"] + "\n\n")
-        
-#         f.write("Links:\n" + "\n".join(export["links"]) + "\n\n")
-        
-#         f.write("Languages:\n")
-#         for lang in export["languages"]:
-#             f.write(f"- {lang['lang']} ({lang['lang_lvl']})\n")
-#         f.write("\n")
-
-#         f.write("Work Experience:\n")
-#         for we in export["work_exp"]:
-#             f.write(f"- {we}\n")
-#         f.write("\n")
-
-#         f.write("Education:\n")
-#         for edu in export["education"]:
-#             f.write(f"- {edu}\n")
-#         f.write("\n")
-
-#         f.write("Projects:\n")
-#         for proj in export["projects"]:
-#             f.write(f"- {proj}\n")
-#         f.write("\n")
-
-#         f.write("Certifications:\n" + "\n".join(export["certifications"]) + "\n\n")
-#         f.write("Skills:\n")
-
-#         for skill in export["skills"]:
-#             if isinstance(skill, dict):
-#                 # nếu skill lưu dạng dict
-#                 skill_name = skill.get("skill_name")
-#                 f.write(f"- {skill_name}\n")
-
-
-#     st.toast("Form submitted and files saved!", icon="🎯")
 
 def submit_form(uploaded_file_bytes=None, uploaded_file_type=None):
-    """
-    Lấy dữ liệu từ session --> lưu ra JSON + TXT + ảnh (nếu có)
-    """
+    autofilled_work_exp = globals().get("autofilled_work_exp", [])
+    autofilled_edus = globals().get("autofilled_edus", [])
+    autofilled_projects = globals().get("autofilled_projects", [])
+    autofilled_skills = globals().get("autofilled_skills", [])
+    autofilled_languages = globals().get("autofilled_languages", [])
+    
+
     # ===== Work Experience =====
     export_work_exp = []
     for i in range(len(autofilled_work_exp)):
@@ -410,16 +284,22 @@ def submit_form(uploaded_file_bytes=None, uploaded_file_type=None):
         for skill in export["skills"]:
             if isinstance(skill, dict):
                 f.write(f"- {skill.get('skill_name')}\n")
-
     # ===== Nếu file gốc là PDF thì lưu thêm ảnh từng trang =====
-    if uploaded_file_bytes and uploaded_file_type and uploaded_file_type.lower() == "pdf":
+
+    uploaded_file_bytes = st.session_state.get("uploaded_file_bytes")
+    uploaded_file_type = st.session_state.get("uploaded_file_type")
+
+    if uploaded_file_bytes and uploaded_file_type and "pdf" in uploaded_file_type.lower():
         doc = fitz.open(stream=uploaded_file_bytes, filetype="pdf")
+        print("Uploaded file type:", uploaded_file_type)
         for i, page in enumerate(doc):
             pix = page.get_pixmap(dpi=200)
             img_path = os.path.join(output_dir, f"page_{i+1}.png")
             pix.save(img_path)
+            print(f"Saved: {img_path}")
         doc.close()
-
+    st.session_state["uploaded_file_bytes"] = None
+    st.session_state["uploaded_file_type"] = None
     st.toast("Form submitted and files saved!", icon="🎯")
 
 def downloader_callback(): # download kết quả json cuối 
@@ -461,12 +341,15 @@ st.markdown(
 )
 
 # st.button("Restart", on_click="restart")
+#upload file
 with st.sidebar:
     uploaded_file = st.file_uploader("Upload file PDF hoặc DOCX", on_change=uploader_callback)
 
     if uploaded_file is not None:
         file_bytes = uploaded_file.read()
         if uploaded_file.name.lower().endswith(".pdf"):
+            st.session_state["uploaded_file_bytes"] = file_bytes
+            st.session_state["uploaded_file_type"] = uploaded_file.type
             display_file(file_bytes, 'pdf')
         elif uploaded_file.name.lower().endswith(".docx"):
             display_file(file_bytes, 'docx')
@@ -474,29 +357,6 @@ with st.sidebar:
             st.warning("Chỉ hỗ trợ PDF và DOCX")
     else:
         st.info("Please upload file.")
-
-
-
-# Xử lý trạng thái
-# if st.session_state['processed']:
-#     status = st.status("Editing the resume ... ", expanded=True)
-# elif uploaded_file is not None:
-#     status = st.status("Processing the resume ... ", expanded=True) 
-
-# if uploaded_file is not None and not st.session_state.get('processed', False):
-#     # Vì uploaded_file.read() đã dùng ở trên, cần reset pointer
-#     uploaded_file.seek(0)
-#     file_bytes = uploaded_file.read()
-#     filename = uploaded_file.name
-
-#     # Gọi hàm trích xuất text
-#     status.write("👩‍💻 Analyzing the resume ...")
-#     parsed_data = extract_text_from_file(file_bytes, filename)
-
-#     # Đánh dấu đã xử lý xong
-#     st.session_state['parsed_pdf'] = parsed_data
-#     st.session_state['processed'] = True
-#     status.update(label="Completed", state="complete", expanded=False)
 
 
 if uploaded_file is not None and not st.session_state.get('processed', False):
@@ -744,6 +604,7 @@ if st.session_state.get('processed', False):
 
     c1, c2 = st.columns(2, gap='large')
     c1.button("Submit", on_click=submit_form, key="submit")
+    
     if st.session_state['output_json'] is not None:
         # download_data = json.dumps(st.session_state['output_json'])
         processed_data = post_process(st.session_state['output_json'])
