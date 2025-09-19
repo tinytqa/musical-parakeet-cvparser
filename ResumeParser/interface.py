@@ -343,7 +343,7 @@ st.markdown(
 # st.button("Restart", on_click="restart")
 #upload file
 with st.sidebar:
-    uploaded_file = st.file_uploader("Upload file PDF hoặc DOCX", on_change=uploader_callback)
+    uploaded_file = st.file_uploader("Upload file PDF or DOCX", on_change=uploader_callback)
 
     if uploaded_file is not None:
         file_bytes = uploaded_file.read()
