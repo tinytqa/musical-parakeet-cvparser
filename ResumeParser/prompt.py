@@ -123,11 +123,13 @@ def prompt_to_parse_cv(resume): # yêu cầu GPT sinh ra file json theo format c
     <end>
 
     You are a Senior Recruiter (SR) reading the resume.
-    Parse the resume into the output json file, strictly following the example and template.
-    Note: the field "responsibilities" should be copied exactly from the resume.
+    Parse the resume into the output JSON file, strictly following the example and template.
+    Important: Keep the original language of the resume (Vietnamese or English). Do NOT translate or change any text into another language.
+    Note: The entire resume output must be consistent in one single language, exactly matching the original language of the resume (e.g., if the resume is written in Vietnamese, all fields must be in Vietnamese; if in English, all fields must be in English). Do not mix languages or translate.
+    Note: The field "responsibilities" should be copied exactly from the resume.
     Note: The field "school" must be copied exactly as it appears in the resume. Do not modify, add, or normalize the school name in any way.
-    Note: if the description is not provided, write a summary for the field description.
-    
+    Note: If the description is not provided, write a summary for the field description in the same language as the resume.
+
     Answer format:
 
     SR:

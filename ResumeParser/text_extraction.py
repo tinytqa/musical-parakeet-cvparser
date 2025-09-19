@@ -11,15 +11,69 @@ import io
 from paddleocr import PaddleOCR
 from text_processing import process_text_ocr   
 from prompt import post_parse_cv, prompt_to_parse_cv
-
+from PyPDF2 import PdfReader
 import google.generativeai as genai 
 from dotenv import load_dotenv
+from langdetect import detect
 load_dotenv()
 
 # Lấy API_KEY ra dùng
 api_key = os.getenv("api_key")
 
 genai.configure(api_key=api_key)
+
+
+import fitz  # PyMuPDF
+from paddleocr import PaddleOCR
+from PIL import Image
+import numpy as np
+
+def guess_vi_en_from_pdf(file_bytes: bytes) -> str:
+    """
+    Nhận diện file PDF là tiếng Việt hay tiếng Anh.
+    - Ưu tiên đọc text trực tiếp từ PDF.
+    - Nếu không có text (PDF scan) → dùng OCR.
+    Trả về 'vi' hoặc 'en'.
+    """
+    text = ""
+
+    try:
+        pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
+
+        # Đọc text từ 2 trang đầu
+        for page in pdf_doc[:2]:
+            page_text = page.get_text("text")
+            if page_text:
+                text += page_text
+
+        # Nếu text rỗng → fallback OCR (chỉ OCR trang đầu để tiết kiệm)
+        if not text.strip():
+            page = pdf_doc[0]
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+            # OCR đa ngôn ngữ (en+vi)
+            ocr = PaddleOCR(use_angle_cls=True, lang="en")  # có thể đổi thành "multilingual" nếu cài đủ model
+            results = ocr.ocr(np.array(img))
+
+            if results and results[0]:
+                text = " ".join([line[1][0] for line in results[0]])
+
+        pdf_doc.close()
+
+    except Exception as e:
+        print("PDF read error:", e)
+        return "en"
+
+    # Nếu vẫn rỗng thì fallback 'en'
+    if not text.strip():
+        return "en"
+
+    # Heuristic check tiếng Việt
+    vietnamese_chars = "ăâđêôơưÁÀẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÉÈẺẼẸÊẾỀỂỄỆÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÍÌỈĨỊÝỲỶỸỴ"
+    count_vi = sum(c in vietnamese_chars for c in text)
+
+    return "vi" if count_vi > 3 else "en"
 
 
 def extract_text_from_file(file_bytes: bytes, filename: str, postprocess: bool = True, to_json: bool = True) -> str:
@@ -63,9 +117,11 @@ def extract_text_from_file(file_bytes: bytes, filename: str, postprocess: bool =
 
                 if page_text:
                     text += page_text + "\n"
+                    
                 else:
                     # PDF scan → OCR
-                    ocr = PaddleOCR(use_angle_cls=True, lang="en")
+                    
+                    ocr = PaddleOCR(use_angle_cls=True, lang="vi")
 
                     pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
                     img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
@@ -91,7 +147,7 @@ def extract_text_from_file(file_bytes: bytes, filename: str, postprocess: bool =
 
                     if page_ocr_text:
                         text += "\n".join(page_ocr_text) + "\n"
-
+            print(text)
             pdf_doc.close()
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Error processing PDF file: {e}")
