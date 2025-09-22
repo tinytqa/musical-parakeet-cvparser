@@ -82,7 +82,6 @@ def infer_more_skills():
     st.session_state['new_skills'] = new_skills
 
 
-
 def display_file(file_bytes: bytes, file_type: str):
     """
     Chỉ hiển thị file PDF hoặc DOCX trong Streamlit (preview),
@@ -315,6 +314,8 @@ def uploader_callback(): # reset pipeline xử lý CV mới
     st.session_state['parsed_pdf'] = dict()
     st.session_state['processed'] = False
     st.session_state['output_json'] = None
+    st.session_state['new_skills'] = []
+
 
 def init_state(key, value):
     if key not in st.session_state:

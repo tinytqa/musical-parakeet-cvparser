@@ -209,7 +209,7 @@ def prompt_to_add_skills(skills, resume_json, domain='IT'): #cải thiện skill
     You are improving the skills section in your customer's resume.
     You read the skill list. You read the resume and try to look for more skills and their years of experience to add to the list.
     The skill should be related to the domain. Only list the extra skills.
-    
+    Note: write skill in the language of the document 
     resume:
     <begin>
     {resume_json}

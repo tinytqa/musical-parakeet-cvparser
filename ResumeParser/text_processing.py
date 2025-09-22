@@ -43,3 +43,4 @@ def process_text_ocr(text: str) -> str:
     text = fix_punctuation_spacing(text)       
     #text = correct_spelling(text)       
     return text
+
