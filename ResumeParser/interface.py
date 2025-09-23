@@ -249,40 +249,40 @@ def submit_form(uploaded_file_bytes=None, uploaded_file_type=None):
         json.dump(export, f, ensure_ascii=False, indent=4)
 
     # ===== Lưu TXT đơn giản =====
-    txt_path = os.path.join(output_dir, "export_resume.txt")
-    with open(txt_path, "w", encoding="utf-8") as f:
-        f.write(f"Name: {export['candidate_name']}\n")
-        f.write(f"Title: {export['candidate_title']}\n\n")
-        f.write("Summary:\n" + export["summary"] + "\n\n")
+    # txt_path = os.path.join(output_dir, "export_resume.txt")
+    # with open(txt_path, "w", encoding="utf-8") as f:
+    #     f.write(f"Name: {export['candidate_name']}\n")
+    #     f.write(f"Title: {export['candidate_title']}\n\n")
+    #     f.write("Summary:\n" + export["summary"] + "\n\n")
 
-        f.write("Links:\n" + "\n".join(export["links"]) + "\n\n")
+    #     f.write("Links:\n" + "\n".join(export["links"]) + "\n\n")
 
-        f.write("Languages:\n")
-        for lang in export["languages"]:
-            f.write(f"- {lang['lang']} ({lang['lang_lvl']})\n")
-        f.write("\n")
+    #     f.write("Languages:\n")
+    #     for lang in export["languages"]:
+    #         f.write(f"- {lang['lang']} ({lang['lang_lvl']})\n")
+    #     f.write("\n")
 
-        f.write("Work Experience:\n")
-        for we in export["work_exp"]:
-            f.write(f"- {we}\n")
-        f.write("\n")
+    #     f.write("Work Experience:\n")
+    #     for we in export["work_exp"]:
+    #         f.write(f"- {we}\n")
+    #     f.write("\n")
 
-        f.write("Education:\n")
-        for edu in export["education"]:
-            f.write(f"- {edu}\n")
-        f.write("\n")
+    #     f.write("Education:\n")
+    #     for edu in export["education"]:
+    #         f.write(f"- {edu}\n")
+    #     f.write("\n")
 
-        f.write("Projects:\n")
-        for proj in export["projects"]:
-            f.write(f"- {proj}\n")
-        f.write("\n")
+    #     f.write("Projects:\n")
+    #     for proj in export["projects"]:
+    #         f.write(f"- {proj}\n")
+    #     f.write("\n")
 
-        f.write("Certifications:\n" + "\n".join(export["certifications"]) + "\n\n")
+    #     f.write("Certifications:\n" + "\n".join(export["certifications"]) + "\n\n")
 
-        f.write("Skills:\n")
-        for skill in export["skills"]:
-            if isinstance(skill, dict):
-                f.write(f"- {skill.get('skill_name')}\n")
+    #     f.write("Skills:\n")
+    #     for skill in export["skills"]:
+    #         if isinstance(skill, dict):
+    #             f.write(f"- {skill.get('skill_name')}\n")
     # ===== Nếu file gốc là PDF thì lưu thêm ảnh từng trang =====
 
     uploaded_file_bytes = st.session_state.get("uploaded_file_bytes")

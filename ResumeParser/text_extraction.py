@@ -137,7 +137,17 @@ def extract_text_from_file(file_bytes: bytes, filename: str, postprocess: bool =
             text = process_text_ocr(text)   # hàm xử lý OCR của bạn
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"LLM postprocess failed: {e}")
+    
+    # ----------- Lưu ra file TXT -----------
+    # folder_name = "cv"
+    # output_dir = os.path.join("output", folder_name)
+    # os.makedirs(output_dir, exist_ok=True)
 
+    # output_txt_path = os.path.join(output_dir, f"{path.stem}.txt")
+    # with open(output_txt_path, "w", encoding="utf-8") as f:
+    #     f.write(text)
+
+    
     # ----------- Chuyển sang JSON + Lưu file -----------
     if to_json:
         try:
