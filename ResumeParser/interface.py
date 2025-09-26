@@ -11,6 +11,7 @@ from export_resume import create_docx_file, post_process
 from prompt import post_add_skills, post_rewrite_task, post_write_description, prompt_to_add_skills, prompt_to_rewrite_task, prompt_to_write_description
 from text_extraction import extract_text_from_file
 from llm_utils import call_gemini
+from rag import build_rag_pipeline
 
 def write_description(i):
     st.toast("Summarizing description ...", icon='✍️')
@@ -50,7 +51,6 @@ def rewrite_resp(i):
     new_output = post_rewrite_task(new_output)
     st.session_state[f"work_responsibilities_{i}"] = new_output
     autofilled_work_exp[i]["work_responsibilities"]  = st.session_state[f"work_responsibilities_{i}"]
-
 
 
 def infer_more_skills():
@@ -149,7 +149,18 @@ def submit_form(uploaded_file_bytes=None, uploaded_file_type=None):
     autofilled_projects = globals().get("autofilled_projects", [])
     autofilled_skills = globals().get("autofilled_skills", [])
     autofilled_languages = globals().get("autofilled_languages", [])
-    
+
+    if "birth_year" not in st.session_state:
+        st.session_state.birth_year = ""
+    if "gender" not in st.session_state:
+        st.session_state.gender = ""
+    if "phone" not in st.session_state:
+        st.session_state.phone = ""
+    if "email" not in st.session_state:
+        st.session_state.email = ""
+    if "address" not in st.session_state:
+        st.session_state.address = ""
+
 
     # ===== Work Experience =====
     export_work_exp = []
@@ -220,6 +231,11 @@ def submit_form(uploaded_file_bytes=None, uploaded_file_type=None):
     export = {
         "candidate_name": st.session_state.candidate_name,
         "candidate_title": st.session_state.candidate_title,
+        "birth_year": st.session_state.birth_year,
+        "gender": st.session_state.gender,
+        "phone": st.session_state.phone,
+        "email": st.session_state.email,
+        "address": st.session_state.address,
         "summary": st.session_state.summary,
         "links": st.session_state.links.split('\n'),
         "languages": export_languages,
@@ -283,6 +299,81 @@ def submit_form(uploaded_file_bytes=None, uploaded_file_type=None):
     #     for skill in export["skills"]:
     #         if isinstance(skill, dict):
     #             f.write(f"- {skill.get('skill_name')}\n")
+
+    txt_path = os.path.join(output_dir, "export_resume_for_chatbot.txt")
+    with open(txt_path, "w", encoding="utf-8") as f:
+        # Thông tin cơ bản
+        f.write(f"# {export.get('candidate_name', 'N/A')}\n")
+        f.write(f"{export.get('candidate_title', '')}\n\n")
+        f.write(f"# {export.get('birth_year', 'N/A')}\n")
+        f.write(f"#{export.get('gender', '')}\n\n")
+        f.write(f"# {export.get('email', 'N/A')}\n")
+        f.write(f"#{export.get('address', '')}\n\n")
+        f.write(f"#{export.get('phone', '')}\n\n")
+
+        # Tóm tắt
+        if export.get("summary"):
+            f.write("## Summary\n")
+            f.write(f"{export['summary']}\n\n")
+
+        # Ngôn ngữ
+        if export.get("languages"):
+            f.write("## Languages\n")
+            for lang_info in export["languages"]:
+                f.write(f"- {lang_info.get('lang', '')}: {lang_info.get('lang_lvl', '')}\n")
+            f.write("\n")
+
+        # Kinh nghiệm làm việc
+        if export.get("work_exp"):
+            f.write("## Work Experience\n")
+            for work in export["work_exp"]:
+                timeline = f"({work.get('work_timeline', ['',''])[0]} - {work.get('work_timeline', ['',''])[1] or 'Present'})"
+                f.write(f"### {work.get('work_title', 'N/A')} at {work.get('work_company', 'N/A')} {timeline}\n")
+                if work.get("work_description"):
+                    f.write(f"- Description: {work['work_description']}\n")
+                if work.get("work_responsibilities"):
+                    f.write("- Responsibilities:\n")
+                    for resp in work["work_responsibilities"]:
+                        f.write(f"  - {resp}\n")
+                if work.get("work_technologies"):
+                    f.write(f"- Technologies: {work['work_technologies']}\n")
+                f.write("\n")
+
+        # Học vấn
+        if export.get("education"):
+            f.write("## Education\n")
+            for edu in export["education"]:
+                timeline = f"({edu.get('edu_timeline', ['',''])[0]} - {edu.get('edu_timeline', ['',''])[1] or 'Present'})"
+                f.write(f"### {edu.get('edu_school', 'N/A')} {timeline}\n")
+                f.write(f"- Degree: {edu.get('edu_degree', '')}\n")
+                if edu.get("edu_gpa"):
+                    f.write(f"- GPA: {edu['edu_gpa']}\n")
+                if edu.get("edu_description"):
+                    f.write(f"- Description: {edu['edu_description']}\n")
+                f.write("\n")
+
+        # Dự án
+        if export.get("projects"):
+            f.write("## Projects\n")
+            for proj in export["projects"]:
+                timeline = f"({proj.get('project_timeline', ['',''])[0]} - {proj.get('project_timeline', ['',''])[1]})"
+                f.write(f"### {proj.get('project_name', 'N/A')} {timeline}\n")
+                if proj.get("project_description"):
+                    f.write(f"- Description: {proj['project_description']}\n")
+                if proj.get("project_responsibilities"):
+                    f.write("- Responsibilities:\n")
+                    for resp in proj["project_responsibilities"]:
+                        f.write(f"  - {resp}\n")
+                if proj.get("project_technologies"):
+                    f.write(f"- Technologies: {proj['project_technologies']}\n")
+                f.write("\n")
+
+        # Kỹ năng
+        if export.get("skills"):
+            f.write("## Skills\n")
+            skill_names = [skill.get('skill_name', '') for skill in export['skills']]
+            f.write(", ".join(skill_names) + "\n")
+            f.write("\n")
     # ===== Nếu file gốc là PDF thì lưu thêm ảnh từng trang =====
 
     uploaded_file_bytes = st.session_state.get("uploaded_file_bytes")
@@ -300,6 +391,27 @@ def submit_form(uploaded_file_bytes=None, uploaded_file_type=None):
     st.session_state["uploaded_file_bytes"] = None
     st.session_state["uploaded_file_type"] = None
     st.toast("Form submitted and files saved!", icon="🎯")
+
+    st.toast("Preparing chatbot...", icon="🤖")
+    
+    # 1. Đọc lại nội dung file txt vừa tạo
+    with open(txt_path, "r", encoding="utf-8") as f:
+        cv_text_content = f.read()
+
+    # 2. Gọi hàm build_rag_pipeline từ rag.py
+    # Truyền thêm output_dir để lưu các file chunk (nếu muốn)
+    qa_chain = build_rag_pipeline(cv_text_content, output_dir)
+    
+    # 3. Lưu pipeline vào session_state để giao diện sử dụng
+    st.session_state.qa_chain = qa_chain
+    
+    # 4. Khởi tạo hoặc xóa lịch sử chat cũ
+    st.session_state.messages = []
+    
+    if qa_chain:
+        st.toast("Chatbot is ready!", icon="✅")
+    else:
+        st.toast("Failed to initialize chatbot.", icon="❌")
 
 def downloader_callback(): # download kết quả json cuối 
     if st.session_state['output_json'] is None:
@@ -382,7 +494,12 @@ if st.session_state.get('processed', False):
 
         # Lấy data từ session_state
         parsed_data = st.session_state.get("parsed_pdf", {})
-
+        st.session_state.candidate_title = parsed_data.get("title", "")
+        st.session_state.birth_year = parsed_data.get("birth_year", "")
+        st.session_state.gender = parsed_data.get("gender", "")
+        st.session_state.phone = parsed_data.get("phone", "")
+        st.session_state.email = parsed_data.get("email", "")
+        st.session_state.address = parsed_data.get("address", "")
         # Basic info
         candidate_name = st.text_input(
             'Name',
@@ -484,7 +601,7 @@ if st.session_state.get('processed', False):
             
             
             # technologies
-            autofilled_work_exp[i]["technologies"] = st.text_area(f"Technologies",
+            autofilled_work_exp[i]["work_technologies"] = st.text_area(f"Technologies",
                                                                 work_exp[i].get("technologies", ""),
                                                                 key=f"work_technologies_{i}")
 
@@ -619,3 +736,37 @@ if st.session_state.get('processed', False):
                            on_click=downloader_callback, key="export")
     if st.session_state.get('output_json') is not None:
         status_edit.update(label="Completed", state="complete", expanded=False)
+    if "qa_chain" in st.session_state and st.session_state.qa_chain is not None:
+    
+        with st.popover("💬 Chat with CV", use_container_width=True):
+            st.markdown("Ask anything about this CV!")
+            
+            # 1. Khởi tạo và hiển thị toàn bộ lịch sử chat đã có
+            if "messages" not in st.session_state:
+                st.session_state.messages = []
+
+            for message in st.session_state.messages:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
+            
+            
+            if prompt := st.chat_input("What do you want to ask?"):
+                # 3. XỬ LÝ LOGIC TRƯỚC: Thêm câu hỏi mới vào session_state
+                st.session_state.messages.append({"role": "user", "content": prompt})
+                with st.chat_message("user"):
+                    st.markdown(prompt)
+
+                # Lấy câu trả lời từ bot
+                with st.spinner("Thinking..."):
+                    response = st.session_state.qa_chain({
+                        "query": prompt,
+                        "chat_history": [(m["role"], m["content"]) for m in st.session_state.messages if m["role"] in ["user","assistant"]]
+                    })
+                    answer = response["result"]
+ 
+
+                
+                # Thêm câu trả lời của bot vào session_state
+                st.session_state.messages.append({"role": "assistant", "content": answer})
+                with st.chat_message("assistant"):
+                    st.markdown(answer)

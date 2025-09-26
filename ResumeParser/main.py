@@ -1,41 +1,14 @@
 import os
 from pathlib import Path
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse
+
 from text_extraction import extract_text_from_file 
-
-# app = FastAPI()
-
-# @app.post("/parse-resume")
-# async def parse_resume(file: UploadFile = File(...)):
-#     try:
-#         # đọc file bytes
-#         file_bytes = await file.read()
-
-#         # extract và parse luôn sang JSON chuẩn
-#         parsed_result = extract_text_from_file(
-#             file_bytes,
-#             file.filename,
-#             postprocess=True,
-#             to_json=True  # trả về dict, không phải str
-#         )
-
-#         return JSONResponse(content={
-#             "filename": file.filename,
-#             "parsed_result": parsed_result
-#         })
-#     except HTTPException as he:
-#         # nếu extract_text_from_file raise HTTPException
-#         raise he
-#     except Exception as e:
-#         # các lỗi khác
-#         raise HTTPException(status_code=500, detail=str(e))
+from typing import List, Optional
+import json
     
-
 
 def main():
     # Đường dẫn file test (có thể là DOCX hoặc PDF)
-    test_file = "C:/Users/tranq/Downloads/HĐ. TVGS- Đan Hoài, Hoài Đức.pdf"
+    test_file = "C:/Users/tranq/Downloads/final-de-cuong-nnpldc.pdf"
     
     # Đọc file bytes
     with open(test_file, "rb") as f:
@@ -70,4 +43,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

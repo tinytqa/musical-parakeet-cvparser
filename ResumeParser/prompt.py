@@ -5,6 +5,11 @@ import json
 template = """ 
 Field	Subfield	Description	Key name	Format
 Name	N/A	Name of the candidate	candidate_name	string
+Phone Number  N/A	Phone number of the candidate	phone	string
+Birth Year	N/A	Birth year of the candidate	birth_year	int
+Gender	N/A	Gender of the candidate	gender	string
+Email	N/A	Email address of the candidate	email	string
+Address	N/A	Address of the candidate	address	string
 Current Title	N/A	Current job title of the candidate	candidate_title	string
 Summary	N/A	A summary of the resume (generated)	summary	string
 Links	N/A	External internet links if available	links	list of string
@@ -34,10 +39,16 @@ Certifications  N/A list of achieved certifications certifications  string
 Skills			skills or technologies used list of dict
 	Skill name	Name of the skill	skill_name	string
 """
+
 #ví dụ cụ thể cho các trường dữ liệu
 example = """
 {
   "candidate_name": "John Doe",
+  "birth_year": 1990,
+  "gender": "Male",
+  "phone": "+1-234-567-8901",
+  "email": "johndoe@example.com",
+  "address": "123 Main St, New York, USA",
   "candidate_title": "Software Engineer",
   "summary": "Experienced software engineer with a passion for creating efficient and scalable solutions.",
   "links": [
@@ -45,8 +56,8 @@ example = """
   ],
   "languages": [
     {"lang": "Vietnamese", "lang_lvl": "native"},
-    {"lang": "English", "lang_lvl": "fluent"},
-  ]
+    {"lang": "English", "lang_lvl": "fluent"}
+  ],
   "work_exp": [
     {
       "work_timeline": [2018, 2023],
@@ -58,7 +69,7 @@ example = """
         "Mentored junior developers"
       ],
       "technologies": "ReAct, Git, Python, Javascript, SQL",
-      "work_description": "Led a team of developers in designing and implementing critical features for the flagship product.",
+      "work_description": "Led a team of developers in designing and implementing critical features for the flagship product."
     },
     {
       "work_timeline": [2015, 2018],
@@ -69,7 +80,7 @@ example = """
         "Collaborated with UX/UI designers for front-end development"
       ],
       "technologies": "Canvas, Figma, CSS, HTML",
-      "work_description": "Collaborated with cross-functional teams to deliver high-quality software solutions.",
+      "work_description": "Collaborated with cross-functional teams to deliver high-quality software solutions."
     }
   ],
   "education": [
@@ -97,12 +108,13 @@ example = """
   "certifications": [
     "IELTS 9.0",
     "2023: PMI Agile Certified Practicioner"
-  ]
+  ],
   "skills": [
-    {"skill_name": "JavaScript"},
+    {"skill_name": "JavaScript"}
   ]
 }
 """
+
 
 def prompt_to_parse_cv(resume): # yêu cầu GPT sinh ra file json theo format chuẩn  
     # AI auto sinh ra json, chưa hoàn chỉnh, có thể lỗi
@@ -129,7 +141,11 @@ def prompt_to_parse_cv(resume): # yêu cầu GPT sinh ra file json theo format c
     Note: The field "responsibilities" should be copied exactly from the resume.
     Note: The field "school" must be copied exactly as it appears in the resume. Do not modify, add, or normalize the school name in any way.
     Note: If the description is not provided, write a summary for the field description in the same language as the resume.
-
+    Note: The field "language level" must be in one of the following formats: native, fluent, proficient, intermediate, basic. Do not use any other formats. 
+    The languge level must match the original language of the resume (e.g., if the resume is in Vietnamese, the language level must also be in Vietnamese).
+    If birth year, gender, email, or address are missing, simply skip those fields (do not invent).
+    The email can be lack of "@" or "." due to OCR error, try to fix it if possible.
+    If phone number is missing, simply skip this field (do not invent).
     Answer format:
 
     SR:

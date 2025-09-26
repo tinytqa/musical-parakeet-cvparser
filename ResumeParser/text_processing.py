@@ -7,7 +7,6 @@ def fix_spacing(text: str) -> str:
     text = re.sub(r'\s+', ' ', text)
     return text.strip()
 
-
 def clean_ocr_artifacts(text: str) -> str:
     # loại bỏ ký tự lạ thường xuất hiện trong OCR
     text = re.sub(r'[^\w\s,.!?-]', '', text)

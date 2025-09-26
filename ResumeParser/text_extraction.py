@@ -8,13 +8,11 @@ import fitz  # PyMuPDF
 import numpy as np
 from PIL import Image
 import io
-from paddleocr import PaddleOCR
 from text_processing import process_text_ocr   
 from prompt import post_parse_cv, prompt_to_parse_cv
 from PyPDF2 import PdfReader
 import google.generativeai as genai 
 from dotenv import load_dotenv
-from langdetect import detect
 import easyocr
 
 load_dotenv()
@@ -138,7 +136,7 @@ def extract_text_from_file(file_bytes: bytes, filename: str, postprocess: bool =
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"LLM postprocess failed: {e}")
     
-    # ----------- Lưu ra file TXT -----------
+    #----------- Lưu ra file TXT -----------
     # folder_name = "cv"
     # output_dir = os.path.join("output", folder_name)
     # os.makedirs(output_dir, exist_ok=True)
@@ -155,7 +153,7 @@ def extract_text_from_file(file_bytes: bytes, filename: str, postprocess: bool =
             response = genai.GenerativeModel("gemini-2.5-flash").generate_content(prompt)
             
             parsed_json = post_parse_cv(response.text)
-            #print (parsed_json)
+            print (parsed_json)
             return parsed_json
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"LLM JSON parse failed: {e}")
