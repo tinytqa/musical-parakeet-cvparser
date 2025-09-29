@@ -2,7 +2,10 @@ from copy import deepcopy
 import io
 import json
 import os
+from pathlib import Path
 import shutil
+import tempfile
+import subprocess
 from docx import Document
 import fitz
 import streamlit as st
@@ -12,6 +15,32 @@ from prompt import post_add_skills, post_rewrite_task, post_write_description, p
 from text_extraction import extract_text_from_file
 from llm_utils import call_gemini
 from rag import build_rag_pipeline
+from docx2pdf import convert  # Add this import for DOCX to PDF conversion
+
+
+# (Ngay sau các dòng import của bạn)
+
+st.markdown("""
+<style>
+    /* Class container cho popover (hộp chat nổi) */
+    .floating-chat {
+    position: fixed !important; /* Giữ cố định trên màn hình */
+    bottom: 20px !important;    /* Cách mép dưới 20px */
+    right: 20px !important;     /* Cách mép phải 20px */
+    left: auto !important;      /* Xóa mọi ảnh hưởng của left */
+    z-index: 9999 !important;   /* Đảm bảo nổi trên cùng */
+}           
+    /* CSS cho nút bấm bên trong floating-chat */
+    .floating-chat button {
+        border-radius: 50%;    /* Làm nút thành hình tròn */
+        width: 55px;           /* Chiều rộng 55px */
+        height: 55px;          /* Chiều cao 55px */
+        font-size: 24px;       /* Kích thước chữ hoặc icon bên trong nút */
+        box-shadow: 2px 2px 8px rgba(0,0,0,0.2); /* Đổ bóng, tạo hiệu ứng nổi */
+    }
+</style>
+""", unsafe_allow_html=True)
+
 
 def write_description(i):
     st.toast("Summarizing description ...", icon='✍️')
@@ -82,54 +111,76 @@ def infer_more_skills():
     st.session_state['new_skills'] = new_skills
 
 
+# def display_file(file_bytes: bytes, file_type: str):
+#     """
+#     Preview file (chỉ còn xử lý PDF). 
+#     Nếu là DOCX thì convert sang PDF trước rồi hiển thị như PDF.
+#     """
+#     if file_type.lower() == "docx":
+#         file_bytes = convert_docx_to_pdf(file_bytes)
+#         file_type = "pdf"
+
+#     if file_type.lower() == "pdf":
+#         doc = fitz.open(stream=file_bytes, filetype="pdf")
+#         image_list = []
+#         for i, page in enumerate(doc):
+#             pix = page.get_pixmap(dpi=150)
+#             img_bytes = pix.tobytes("png")
+#             image_list.append(img_bytes)
+#         doc.close()
+#         st.image(image_list)
+#     else:
+#         st.warning("File type is not supported.")
+
+#     st.session_state['uploaded'] = True
+
+def convert_docx_to_pdf(file_bytes):
+    # Tạo file tạm docx
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp_docx:
+        tmp_docx.write(file_bytes)
+        tmp_docx_path = tmp_docx.name
+
+    tmp_pdf_path = tmp_docx_path.replace(".docx", ".pdf")
+
+    # Chuyển đổi
+    convert(tmp_docx_path, tmp_pdf_path)
+
+    # Đọc pdf ra bytes
+    with open(tmp_pdf_path, "rb") as f:
+        pdf_bytes = f.read()
+
+    # Cleanup thủ công
+    try:
+        os.remove(tmp_docx_path)
+        os.remove(tmp_pdf_path)
+    except Exception as e:
+        print("Cleanup error:", e)
+
+    return pdf_bytes
+
+
 def display_file(file_bytes: bytes, file_type: str):
     """
-    Chỉ hiển thị file PDF hoặc DOCX trong Streamlit (preview),
-    không lưu vào thư mục output.
+    Preview file (chỉ còn xử lý PDF). 
+    Nếu là DOCX thì convert sang PDF trước rồi hiển thị như PDF.
     """
-    if file_type.lower() == 'pdf':
+    if file_type.lower() == "docx":
+        file_bytes = convert_docx_to_pdf(file_bytes)
+        file_type = "pdf"
+
+    if file_type.lower() == "pdf":
         doc = fitz.open(stream=file_bytes, filetype="pdf")
         image_list = []
         for i, page in enumerate(doc):
-            pix = page.get_pixmap(dpi=300)
-            img_bytes = pix.tobytes("png")  # chỉ giữ ảnh trong memory
+            pix = page.get_pixmap(dpi=150)
+            img_bytes = pix.tobytes("png")
             image_list.append(img_bytes)
         doc.close()
         st.image(image_list)
-
-    elif file_type.lower() == 'docx':
-        doc = Document(io.BytesIO(file_bytes))
-        parts = []
-
-        for para in doc.paragraphs:
-            text_content = para.text.strip()
-            if not text_content:
-                continue
-
-            style = para.style.name if para.style else ""
-            if style.startswith("Heading"):
-                level = style.replace("Heading", "").strip()
-                level = int(level) if level.isdigit() else 1
-                parts.append(f"{'#' * level} {text_content}")
-            elif "List Bullet" in style or "List Number" in style:
-                parts.append(f"- {text_content}")
-            else:
-                parts.append(text_content)
-
-        for table in doc.tables:
-            for row in table.rows:
-                row_text = [cell.text.strip() for cell in row.cells if cell.text.strip()]
-                if row_text:
-                    parts.append(" | ".join(row_text))
-
-        formatted_text = "\n".join(parts)
-        st.markdown(formatted_text)
-        
     else:
         st.warning("File type is not supported.")
 
     st.session_state['uploaded'] = True
-
 
 def reset_description(i): # reset về nguyên gốc ban đầu 
     description = work_exp[i].get("work_description", "") 
@@ -263,42 +314,7 @@ def submit_form(uploaded_file_bytes=None, uploaded_file_type=None):
     # ===== Lưu JSON =====
     with open(os.path.join(output_dir, "export_resume.json"), "w", encoding="utf-8") as f:
         json.dump(export, f, ensure_ascii=False, indent=4)
-
-    # ===== Lưu TXT đơn giản =====
-    # txt_path = os.path.join(output_dir, "export_resume.txt")
-    # with open(txt_path, "w", encoding="utf-8") as f:
-    #     f.write(f"Name: {export['candidate_name']}\n")
-    #     f.write(f"Title: {export['candidate_title']}\n\n")
-    #     f.write("Summary:\n" + export["summary"] + "\n\n")
-
-    #     f.write("Links:\n" + "\n".join(export["links"]) + "\n\n")
-
-    #     f.write("Languages:\n")
-    #     for lang in export["languages"]:
-    #         f.write(f"- {lang['lang']} ({lang['lang_lvl']})\n")
-    #     f.write("\n")
-
-    #     f.write("Work Experience:\n")
-    #     for we in export["work_exp"]:
-    #         f.write(f"- {we}\n")
-    #     f.write("\n")
-
-    #     f.write("Education:\n")
-    #     for edu in export["education"]:
-    #         f.write(f"- {edu}\n")
-    #     f.write("\n")
-
-    #     f.write("Projects:\n")
-    #     for proj in export["projects"]:
-    #         f.write(f"- {proj}\n")
-    #     f.write("\n")
-
-    #     f.write("Certifications:\n" + "\n".join(export["certifications"]) + "\n\n")
-
-    #     f.write("Skills:\n")
-    #     for skill in export["skills"]:
-    #         if isinstance(skill, dict):
-    #             f.write(f"- {skill.get('skill_name')}\n")
+    # ===== Lưu TXT cho chatbot =====
 
     txt_path = os.path.join(output_dir, "export_resume_for_chatbot.txt")
     with open(txt_path, "w", encoding="utf-8") as f:
@@ -374,6 +390,12 @@ def submit_form(uploaded_file_bytes=None, uploaded_file_type=None):
             skill_names = [skill.get('skill_name', '') for skill in export['skills']]
             f.write(", ".join(skill_names) + "\n")
             f.write("\n")
+        # Chứng chỉ
+        if export.get("certifications"):
+            f.write("## Certifications\n")
+            for cert in export["certifications"]:
+                f.write(f"- {cert}\n")
+            f.write("\n")
     # ===== Nếu file gốc là PDF thì lưu thêm ảnh từng trang =====
 
     uploaded_file_bytes = st.session_state.get("uploaded_file_bytes")
@@ -427,6 +449,9 @@ def uploader_callback(): # reset pipeline xử lý CV mới
     st.session_state['processed'] = False
     st.session_state['output_json'] = None
     st.session_state['new_skills'] = []
+    st.session_state['candidate_title'] = None
+    st.session_state['messages'] = []
+    st.session_state['qa_chain'] = None
 
 
 def init_state(key, value):
@@ -489,284 +514,300 @@ if uploaded_file is not None and not st.session_state.get('processed', False):
 # Nếu đã xử lý xong thì hiển thị form nhập liệu
 if st.session_state.get('processed', False):
     status_edit = st.status("✍️ Editing the resume ...", expanded=True)
-    with st.expander(label="INFORMATION", expanded=True):
-        st.markdown("""---""")
-
-        # Lấy data từ session_state
-        parsed_data = st.session_state.get("parsed_pdf", {})
-        st.session_state.candidate_title = parsed_data.get("title", "")
-        st.session_state.birth_year = parsed_data.get("birth_year", "")
-        st.session_state.gender = parsed_data.get("gender", "")
-        st.session_state.phone = parsed_data.get("phone", "")
-        st.session_state.email = parsed_data.get("email", "")
-        st.session_state.address = parsed_data.get("address", "")
-        # Basic info
-        candidate_name = st.text_input(
-            'Name',
-            value=parsed_data.get('candidate_name', ""),
-            key="candidate_name"
-        )
-        candidate_title = st.text_input(
-            'Title',
-            value=parsed_data.get('candidate_title', ""),
-            key="candidate_title"
-        )
-        summary = st.text_area(
-            'Summary',
-            value=parsed_data.get('summary', ""),
-            key="summary"
-        )
-
-        # Links
-        links_str = st.text_area(
-            "🔗 Links",
-            value="\n".join(parsed_data.get("links", [])),
-            key="links"
-        )
-
-        # Languages
-        languages = parsed_data.get('languages', [])
-        st.markdown("#### 🌐 Languages")
-        if languages:
-            for l in languages:
-                st.write(f"{l.get('lang', '')} — {l.get('lang_lvl', '')}")
-
-        autofilled_languages = deepcopy(languages)
-        c1, c2 = st.columns([3, 2])
-        for i, lg in enumerate(languages):
-            visibility = "visible" if i == 0 else "hidden"
-            lang = c1.text_input(
-                "Language",
-                value=lg.get("lang", ""),
-                label_visibility=visibility,
-                key=f"lang_{i}"
-            )
-            lang_lvl = c2.text_input(
-                "Level",
-                value=lg.get("lang_lvl", ""),
-                label_visibility=visibility,
-                key=f"lang_lvl_{i}"
-            )
-            autofilled_languages[i] = {"lang": lang, "lang_lvl": lang_lvl}
-
-        # Update lại state
-        st.session_state['parsed_pdf']['languages'] = autofilled_languages
-
-    with st.expander(label="EXPERIENCE", expanded=True,):
-        work_exp = st.session_state['parsed_pdf'].get('work_exp', [])
-        autofilled_work_exp = deepcopy(work_exp)
-        for i, we in enumerate(work_exp):
-            # company
-            autofilled_work_exp[i]["work_company"] = st.text_input(f"Company", 
-                                                            work_exp[i].get("work_company", ""), 
-                                                            key=f"work_company_{i}")
-
-            # timeline
-            c1, c2 = st.columns(2)
-            timeline = work_exp[i].get("work_timeline", [None,None])
-            if timeline is None: timeline = [None, None]
-            w_f = c1.text_input("From", timeline[0], 
-                                key=f"work_timeline_from_{i}")
-            w_t = c2.text_input("To", timeline[-1], 
-                                key=f"work_timeline_to_{i}")
-            autofilled_work_exp[i]["work_timeline"] = [w_f, w_t]
-
-            # title
-            autofilled_work_exp[i]["work_title"] = st.text_input(f"Title", 
-                                                            work_exp[i].get("work_title", ""), 
-                                                            key=f"work_title_{i}")
-
-            # description
-            autofilled_work_exp[i]["work_description"] = st.text_area(f"Description",
-                                                                work_exp[i].get("work_description", ""),
-                                                                height=150,
-                                                                key=f"work_description_{i}",)
-            bc1, bc2 = st.columns(2, gap="large")
-            bc1.button("✍️ Rewrite", on_click=write_description, args=(i,), key=f"rewrite_button_desc_{i}")
-            bc2.button("🔄 Reset", on_click=reset_description, args=(i,), key=f"reset_button_desc_{i}")  
-
-            # responsibilities
-            resps_list = work_exp[i].get("work_responsibilities", [])
-            height = min(100*len(resps_list) if len(resps_list) > 0 else 100, 300)
-            
-            resps_str = "\n".join([f"- {c}" for c in resps_list])
-            autofilled_work_exp[i]["work_responsibilities"] = st.text_area(f"Responsibilities",
-                                                                    resps_str,
-                                                                    height=height,
-                                                                    key=f"work_responsibilities_{i}")
-
-            bc1, bc2 = st.columns(2, gap="large")
-            bc1.button("✍️ Rewrite", on_click=rewrite_resp, args=(i,), key=f"rewrite_button_resp_{i}")
-            bc2.button("🔄 Reset", on_click=reset_resp, args=(i,), key=f"reset_button_resp_{i}")            
-            
-            
-            # technologies
-            autofilled_work_exp[i]["work_technologies"] = st.text_area(f"Technologies",
-                                                                work_exp[i].get("technologies", ""),
-                                                                key=f"work_technologies_{i}")
-
+    tab_info, tab_chat = st.tabs(["📄 Resume Info", "🤖 Chatbot"])
+    with tab_info:
+        with st.expander(label="INFORMATION", expanded=True):
             st.markdown("""---""")
 
-    with st.expander(label="EDUCATION", expanded=True,):
-        edus = st.session_state['parsed_pdf'].get('education', [])
-        autofilled_edus = deepcopy(edus)
-        if len(edus) > 0:
-            for i, edu in enumerate(edus):
-                # Degree
-                autofilled_edus[i]["edu_degree"] = st.text_input(f"Degree",
-                                                            edus[i].get("edu_degree", ""),
-                                                            key=f"edu_degree_{i}")
+            # Lấy data từ session_state
+            parsed_data = st.session_state.get("parsed_pdf", {})
+            st.session_state.candidate_title = parsed_data.get("candidate_title", "")
+            st.session_state.birth_year = parsed_data.get("birth_year", "")
+            st.session_state.gender = parsed_data.get("gender", "")
+            st.session_state.phone = parsed_data.get("phone", "")
+            st.session_state.email = parsed_data.get("email", "")
+            st.session_state.address = parsed_data.get("address", "")
+            # Basic info
+            candidate_name = st.text_input(
+                'Name',
+                value=parsed_data.get('candidate_name', ""),
+                key="candidate_name"
+            )
+            candidate_title = st.text_input(
+                'Title',
+                value=parsed_data.get('candidate_title', ""),
+                key="candidate_title"
+            )
+            summary = st.text_area(
+                'Summary',
+                value=parsed_data.get('summary', ""),
+                key="summary"
+            )
+
+            # Links
+            links_str = st.text_area(
+                "🔗 Links",
+                value="\n".join(parsed_data.get("links", [])),
+                key="links"
+            )
+
+            # Languages
+            languages = parsed_data.get('languages', [])
+            st.markdown("#### 🌐 Languages")
+            if languages:
+                for l in languages:
+                    st.write(f"{l.get('lang', '')} — {l.get('lang_lvl', '')}")
+
+            autofilled_languages = deepcopy(languages)
+            c1, c2 = st.columns([3, 2])
+            for i, lg in enumerate(languages):
+                visibility = "visible" if i == 0 else "hidden"
+                lang = c1.text_input(
+                    "Language",
+                    value=lg.get("lang", ""),
+                    label_visibility=visibility,
+                    key=f"lang_{i}"
+                )
+                lang_lvl = c2.text_input(
+                    "Level",
+                    value=lg.get("lang_lvl", ""),
+                    label_visibility=visibility,
+                    key=f"lang_lvl_{i}"
+                )
+                autofilled_languages[i] = {"lang": lang, "lang_lvl": lang_lvl}
+
+            # Update lại state
+            st.session_state['parsed_pdf']['languages'] = autofilled_languages
+
+        with st.expander(label="EXPERIENCE", expanded=True,):
+            work_exp = st.session_state['parsed_pdf'].get('work_exp', [])
+            autofilled_work_exp = deepcopy(work_exp)
+            for i, we in enumerate(work_exp):
+                # company
+                autofilled_work_exp[i]["work_company"] = st.text_input(f"Company", 
+                                                                work_exp[i].get("work_company", ""), 
+                                                                key=f"work_company_{i}")
 
                 # timeline
                 c1, c2 = st.columns(2)
-                edu_timeline = edus[i].get("edu_timeline", [None,None])
-                if len(edu_timeline) < 2:
-                    edu_timeline = [None, None]
-                w_f = c1.text_input("From",
-                                    edu_timeline[0], 
-                                    key=f"edu_timeline_from_{i}")
-                w_t = c2.text_input("To", 
-                                    edu_timeline[-1], 
-                                    key=f"edu_timeline_to_{i}")
-                autofilled_edus[i]["edu_timeline"] = [w_f, w_t]
-                
-                # school
-                autofilled_edus[i]["edu_school"] = st.text_input(f"School", 
-                                                            edus[i].get("edu_school", ""), 
-                                                            key=f"edu_school_{i}")
-
-                # GPA
-                autofilled_edus[i]["edu_gpa"] = st.text_input(f"GPA", 
-                                                        edus[i].get("edu_gpa", ""), 
-                                                        key=f"edu_gpa_{i}")
-                
-                # description
-                autofilled_edus[i]["edu_description"] = st.text_area(f"Description",
-                                                                edus[i].get("edu_description", ""),
-                                                                height=100,
-                                                                key=f"edu_description_{i}",)
-                st.markdown("""---""")
-
-    with st.expander(label="PROJECTS", expanded=True,):
-        projects = st.session_state['parsed_pdf'].get('projects', [])
-        autofilled_projects = deepcopy(projects)
-        if len(projects) > 0:
-            for i, prj in enumerate(projects):
-                # name
-                autofilled_projects[i]["project_name"] = st.text_input("Project name",
-                                                                projects[i].get("project_name", ""),
-                                                                key=f"project_name_{i}",)
-
-                # timeline
-                c1, c2 = st.columns(2)
-                timeline = projects[i].get("project_timeline", [None,None])
-                if timeline is None: timeline = [None,None]
+                timeline = work_exp[i].get("work_timeline", [None,None])
+                if timeline is None: timeline = [None, None]
                 w_f = c1.text_input("From", timeline[0], 
-                                    key=f"project_timeline_from_{i}")
+                                    key=f"work_timeline_from_{i}")
                 w_t = c2.text_input("To", timeline[-1], 
-                                    key=f"project_timeline_to_{i}")
-                autofilled_projects[i]["project_timeline"] = [w_f, w_t]
-                
+                                    key=f"work_timeline_to_{i}")
+                autofilled_work_exp[i]["work_timeline"] = [w_f, w_t]
+
+                # title
+                autofilled_work_exp[i]["work_title"] = st.text_input(f"Title", 
+                                                                work_exp[i].get("work_title", ""), 
+                                                                key=f"work_title_{i}")
+
                 # description
-                autofilled_projects[i]["project_description"] = st.text_area(f"Description",
-                                                                projects[i].get("project_description", ""),
-                                                                height=100,
-                                                                key=f"project_description_{i}",)
+                autofilled_work_exp[i]["work_description"] = st.text_area(f"Description",
+                                                                    work_exp[i].get("work_description", ""),
+                                                                    height=150,
+                                                                    key=f"work_description_{i}",)
+                bc1, bc2 = st.columns(2, gap="large")
+                bc1.button("✍️ Rewrite", on_click=write_description, args=(i,), key=f"rewrite_button_desc_{i}")
+                bc2.button("🔄 Reset", on_click=reset_description, args=(i,), key=f"reset_button_desc_{i}")  
 
                 # responsibilities
-                resps_list = projects[i].get("project_responsibilities", [])
+                resps_list = work_exp[i].get("work_responsibilities", [])
                 height = min(100*len(resps_list) if len(resps_list) > 0 else 100, 300)
                 
                 resps_str = "\n".join([f"- {c}" for c in resps_list])
-                autofilled_projects[i]["project_responsibilities"] = st.text_area(f"Responsibilities",
+                autofilled_work_exp[i]["work_responsibilities"] = st.text_area(f"Responsibilities",
                                                                         resps_str,
                                                                         height=height,
-                                                                        key=f"project_responsibilities_{i}")
+                                                                        key=f"work_responsibilities_{i}")
+
+                bc1, bc2 = st.columns(2, gap="large")
+                bc1.button("✍️ Rewrite", on_click=rewrite_resp, args=(i,), key=f"rewrite_button_resp_{i}")
+                bc2.button("🔄 Reset", on_click=reset_resp, args=(i,), key=f"reset_button_resp_{i}")            
+                
                 
                 # technologies
-                autofilled_projects[i]["project_technologies"] = st.text_area(f"Technologies",
-                                                                    projects[i].get("project_technologies", ""),
-                                                                    key=f"project_technologies_{i}")
+                autofilled_work_exp[i]["work_technologies"] = st.text_area(f"Technologies",
+                                                                    work_exp[i].get("technologies", ""),
+                                                                    key=f"work_technologies_{i}")
 
-    with st.expander(label="SKILLS", expanded=True,):
-        certifications = st.session_state['parsed_pdf'].get('certifications', [])
-        height = min(100*len(certifications) if len(certifications) > 0 else 100, 300)
-        certifications = st.text_area("Certifications", "\n".join(certifications),
-                                      height=height,
-                                      key="certifications")
+                st.markdown("""---""")
 
-        skills = st.session_state['parsed_pdf'].get("skills", [])
-        autofilled_skills = deepcopy(skills)
-        c1, c2 = st.columns([4,1])
-        for i,skill in enumerate(skills):
-            visibility = "visible" if i == 0 else "hidden"
-            skill_name = c1.text_input("Skill name", skills[i].get("skill_name", ""), 
-                                        label_visibility=visibility, 
-                                        key=f"skill_name_{i}")
-             
-            autofilled_skills[i] = {"skill_name": skill_name}
+        with st.expander(label="EDUCATION", expanded=True,):
+            edus = st.session_state['parsed_pdf'].get('education', [])
+            autofilled_edus = deepcopy(edus)
+            if len(edus) > 0:
+                for i, edu in enumerate(edus):
+                    # Degree
+                    autofilled_edus[i]["edu_degree"] = st.text_input(f"Degree",
+                                                                edus[i].get("edu_degree", ""),
+                                                                key=f"edu_degree_{i}")
 
-        # new skills
-        offset = len(autofilled_skills)
-        if 'new_skills' not in st.session_state:
-            st.session_state['new_skills'] = []
-        if len(st.session_state['new_skills']) == 0:
-            st.button("Look for more skills", on_click=infer_more_skills)
-        new_skills = st.session_state['new_skills']
-        for i,skill in enumerate(new_skills):
-            visibility = "visible" if i == 0 else "hidden"
-            skill_name = c1.text_input("", new_skills[i].get("skill_name", ""), 
-                                        label_visibility=visibility, 
-                                        key=f"skill_name_{i+offset}")
-            autofilled_skills.append({"skill_name": skill_name})
+                    # timeline
+                    c1, c2 = st.columns(2)
+                    edu_timeline = edus[i].get("edu_timeline", [None,None])
+                    if len(edu_timeline) < 2:
+                        edu_timeline = [None, None]
+                    w_f = c1.text_input("From",
+                                        edu_timeline[0], 
+                                        key=f"edu_timeline_from_{i}")
+                    w_t = c2.text_input("To", 
+                                        edu_timeline[-1], 
+                                        key=f"edu_timeline_to_{i}")
+                    autofilled_edus[i]["edu_timeline"] = [w_f, w_t]
+                    
+                    # school
+                    autofilled_edus[i]["edu_school"] = st.text_input(f"School", 
+                                                                edus[i].get("edu_school", ""), 
+                                                                key=f"edu_school_{i}")
 
-    c1, c2 = st.columns(2, gap='large')
-    c1.button("Submit", on_click=submit_form, key="submit")
+                    # GPA
+                    autofilled_edus[i]["edu_gpa"] = st.text_input(f"GPA", 
+                                                            edus[i].get("edu_gpa", ""), 
+                                                            key=f"edu_gpa_{i}")
+                    
+                    # description
+                    autofilled_edus[i]["edu_description"] = st.text_area(f"Description",
+                                                                    edus[i].get("edu_description", ""),
+                                                                    height=100,
+                                                                    key=f"edu_description_{i}",)
+                    st.markdown("""---""")
+
+        with st.expander(label="PROJECTS", expanded=True,):
+            projects = st.session_state['parsed_pdf'].get('projects', [])
+            autofilled_projects = deepcopy(projects)
+            if len(projects) > 0:
+                for i, prj in enumerate(projects):
+                    # name
+                    autofilled_projects[i]["project_name"] = st.text_input("Project name",
+                                                                    projects[i].get("project_name", ""),
+                                                                    key=f"project_name_{i}",)
+
+                    # timeline
+                    c1, c2 = st.columns(2)
+                    timeline = projects[i].get("project_timeline", [None,None])
+                    if timeline is None: timeline = [None,None]
+                    w_f = c1.text_input("From", timeline[0], 
+                                        key=f"project_timeline_from_{i}")
+                    w_t = c2.text_input("To", timeline[-1], 
+                                        key=f"project_timeline_to_{i}")
+                    autofilled_projects[i]["project_timeline"] = [w_f, w_t]
+                    
+                    # description
+                    autofilled_projects[i]["project_description"] = st.text_area(f"Description",
+                                                                    projects[i].get("project_description", ""),
+                                                                    height=100,
+                                                                    key=f"project_description_{i}",)
+
+                    # responsibilities
+                    resps_list = projects[i].get("project_responsibilities", [])
+                    height = min(100*len(resps_list) if len(resps_list) > 0 else 100, 300)
+                    
+                    resps_str = "\n".join([f"- {c}" for c in resps_list])
+                    autofilled_projects[i]["project_responsibilities"] = st.text_area(f"Responsibilities",
+                                                                            resps_str,
+                                                                            height=height,
+                                                                            key=f"project_responsibilities_{i}")
+                    
+                    # technologies
+                    autofilled_projects[i]["project_technologies"] = st.text_area(f"Technologies",
+                                                                        projects[i].get("project_technologies", ""),
+                                                                        key=f"project_technologies_{i}")
+
+        with st.expander(label="SKILLS", expanded=True,):
+            certifications = st.session_state['parsed_pdf'].get('certifications', [])
+            height = min(100*len(certifications) if len(certifications) > 0 else 100, 300)
+            certifications = st.text_area("Certifications", "\n".join(certifications),
+                                        height=height,
+                                        key="certifications")
+
+            skills = st.session_state['parsed_pdf'].get("skills", [])
+            autofilled_skills = deepcopy(skills)
+            c1, c2 = st.columns([4,1])
+            for i,skill in enumerate(skills):
+                visibility = "visible" if i == 0 else "hidden"
+                skill_name = c1.text_input("Skill name", skills[i].get("skill_name", ""), 
+                                            label_visibility=visibility, 
+                                            key=f"skill_name_{i}")
+                
+                autofilled_skills[i] = {"skill_name": skill_name}
+
+            # new skills
+            offset = len(autofilled_skills)
+            if 'new_skills' not in st.session_state:
+                st.session_state['new_skills'] = []
+            if len(st.session_state['new_skills']) == 0:
+                st.button("Look for more skills", on_click=infer_more_skills)
+            new_skills = st.session_state['new_skills']
+            for i,skill in enumerate(new_skills):
+                visibility = "visible" if i == 0 else "hidden"
+                skill_name = c1.text_input("", new_skills[i].get("skill_name", ""), 
+                                            label_visibility=visibility, 
+                                            key=f"skill_name_{i+offset}")
+                autofilled_skills.append({"skill_name": skill_name})
+
+        c1, c2 = st.columns(2, gap='large')
+        c1.button("Submit", on_click=submit_form, key="submit")
+        
+        if st.session_state['output_json'] is not None:
+            # download_data = json.dumps(st.session_state['output_json'])
+            processed_data = post_process(st.session_state['output_json'])
+            download_data = create_docx_file(processed_data)
+            bio = io.BytesIO()
+            download_data.save(bio)
+            c2.download_button("🖨️ Export file", 
+                            data=bio.getvalue(), 
+                            file_name='export_resume.docx', 
+                            mime="docx",
+                            on_click=downloader_callback, key="export")
+        if st.session_state.get('output_json') is not None:
+            status_edit.update(label="Completed", state="complete", expanded=False)
     
-    if st.session_state['output_json'] is not None:
-        # download_data = json.dumps(st.session_state['output_json'])
-        processed_data = post_process(st.session_state['output_json'])
-        download_data = create_docx_file(processed_data)
-        bio = io.BytesIO()
-        download_data.save(bio)
-        c2.download_button("🖨️ Export file", 
-                           data=bio.getvalue(), 
-                           file_name='export_resume.docx', 
-                           mime="docx",
-                           on_click=downloader_callback, key="export")
-    if st.session_state.get('output_json') is not None:
-        status_edit.update(label="Completed", state="complete", expanded=False)
-    if "qa_chain" in st.session_state and st.session_state.qa_chain is not None:
-    
-        with st.popover("💬 Chat with CV", use_container_width=True):
-            st.markdown("Ask anything about this CV!")
+    with tab_chat:
+
+    # chat 
+        if "qa_chain" in st.session_state and st.session_state.qa_chain is not None:
             
-            # 1. Khởi tạo và hiển thị toàn bộ lịch sử chat đã có
+            st.markdown('<div class="floating-chat">', unsafe_allow_html=True)
+
+            st.markdown("Ask anything about this CV!")
+
+            # 1. Khởi tạo state
             if "messages" not in st.session_state:
                 st.session_state.messages = []
 
+            # 2. Hiển thị lịch sử chat (user + assistant)
             for message in st.session_state.messages:
                 with st.chat_message(message["role"]):
                     st.markdown(message["content"])
-            
-            
-            if prompt := st.chat_input("What do you want to ask?"):
-                # 3. XỬ LÝ LOGIC TRƯỚC: Thêm câu hỏi mới vào session_state
-                st.session_state.messages.append({"role": "user", "content": prompt})
-                with st.chat_message("user"):
-                    st.markdown(prompt)
 
-                # Lấy câu trả lời từ bot
+            prompt = st.chat_input("What do you want to ask?")
+
+            if prompt:
+                # Lưu user question
+                st.session_state.messages.append({"role": "user", "content": prompt})
+
+                # Lấy câu trả lời
                 with st.spinner("Thinking..."):
                     response = st.session_state.qa_chain({
                         "query": prompt,
-                        "chat_history": [(m["role"], m["content"]) for m in st.session_state.messages if m["role"] in ["user","assistant"]]
+                        "chat_history": [
+                            (m["role"], m["content"]) 
+                            for m in st.session_state.messages 
+                            if m["role"] in ["user", "assistant"]
+                        ]
                     })
                     answer = response["result"]
- 
 
-                
-                # Thêm câu trả lời của bot vào session_state
+                # Lưu bot answer
                 st.session_state.messages.append({"role": "assistant", "content": answer})
-                with st.chat_message("assistant"):
-                    st.markdown(answer)
+
+                # Rerun để input luôn ở cuối
+                st.rerun()
+        else:
+            st.info("📑 Please submit CV first to start chatting.")
+        
+
+            # Đóng thẻ div
+            st.markdown('</div>', unsafe_allow_html=True)

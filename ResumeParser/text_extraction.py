@@ -2,9 +2,11 @@ import json
 import os
 from pathlib import Path
 from pyexpat import model
+import tempfile
 from fastapi import HTTPException
 from docx import Document
 import fitz  # PyMuPDF
+from docx2pdf import convert
 import numpy as np
 from PIL import Image
 import io
@@ -36,91 +38,66 @@ def preprocess_for_easyocr(pil_img):
 
     return norm
 
+def convert_docx_to_pdf(file_bytes):
+    # Tạo file tạm docx
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp_docx:
+        tmp_docx.write(file_bytes)
+        tmp_docx_path = tmp_docx.name
+
+    tmp_pdf_path = tmp_docx_path.replace(".docx", ".pdf")
+
+    # Chuyển đổi
+    convert(tmp_docx_path, tmp_pdf_path)
+
+    # Đọc pdf ra bytes
+    with open(tmp_pdf_path, "rb") as f:
+        pdf_bytes = f.read()
+
+    # Cleanup thủ công
+    try:
+        os.remove(tmp_docx_path)
+        os.remove(tmp_pdf_path)
+    except Exception as e:
+        print("Cleanup error:", e)
+
+    return pdf_bytes
 
 def extract_text_from_file(file_bytes: bytes, filename: str, postprocess: bool = True, to_json: bool = True) -> str:
     path = Path(filename)
     text = ""
 
-    # ----------- DOCX -----------
+    # ----------- DOCX -> convert sang PDF bytes -----------
     if path.suffix.lower() == ".docx":
-        doc = Document(io.BytesIO(file_bytes))
-        parts = []
+        file_bytes = convert_docx_to_pdf(file_bytes)  # nhận về pdf_bytes
+        file_type = "pdf"
+    else:
+        file_type = path.suffix.lower().lstrip(".")
 
-        # Đọc tất cả paragraphs ngoài bảng
-        for para in doc.paragraphs:
-            if para.text.strip():
-                parts.append(para.text.strip())
-
-        # Đọc thêm nội dung trong bảng
-        for table in doc.tables:
-            for row in table.rows:
-                row_text = []
-                for cell in row.cells:
-                    cell_text = " ".join(p.text.strip() for p in cell.paragraphs if p.text.strip())
-                    if cell_text:
-                        row_text.append(cell_text)
-                if row_text:
-                    parts.append(" | ".join(row_text))  # nối các ô trong cùng 1 hàng
-
-        formatted_text = "\n".join(parts)
-
-        # Lưu ra file txt
-    
-        text = formatted_text
-
-    # ----------- PDF -----------
-    elif path.suffix.lower() == ".pdf":
+    # ----------- PDF xử lý -----------
+    if file_type == "pdf":
         try:
             pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
-            
+            ocr = easyocr.Reader(['vi'])  # init 1 lần duy nhất
+
             for page in pdf_doc:
                 page_text = page.get_text("text").strip()
-
                 if page_text:
                     text += page_text + "\n"
-                    
                 else:
                     # PDF scan → OCR
-                    ocr = easyocr.Reader(['vi'])
                     pix = page.get_pixmap(matrix=fitz.Matrix(3, 3))
-                    # img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                     img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                     pre_img = preprocess_for_easyocr(img)
-                    
+
                     try:
                         results = ocr.readtext(pre_img, detail=0, paragraph=True)
                         print("OCR raw results:", results)
                     except Exception as e:
                         raise HTTPException(status_code=400, detail=f"OCR failed: {e}")
 
-                    page_ocr_text = []
-
-                    # if results:
-                    #     if hasattr(results, "rec_texts") and hasattr(results, "rec_scores"):
-                    #         for txt, score in zip(results.rec_texts, results.rec_scores):
-                    #             if score > 0.6:
-                    #                 page_ocr_text.append(txt)
-                    #     elif isinstance(results, list):
-                    #         for res in results:
-                    #             if isinstance(res, dict) and "rec_texts" in res and "rec_scores" in res:
-                    #                 for txt, score in zip(res["rec_texts"], res["rec_scores"]):
-                    #                     if score > 0.6:
-                    #                         page_ocr_text.append(txt)
                     if results:
-                        # for res in results:
-                        #     # res = (bbox, text, confidence)
-                        #     if len(res) >= 3:
-                        #         text_rec, score = res[1], res[2]
-                        #         if score > 0.6:  # confidence threshold
-                        #             page_ocr_text.append(text_rec)
                         text += "\n".join(results) + "\n"
-                    # if page_ocr_text:
-                    #     text += "\n".join(page_ocr_text) + "\n"
 
-                    # if page_ocr_text:
-                    #     text += "\n".join(page_ocr_text) + "\n"
-
-            print(text)
             pdf_doc.close()
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Error processing PDF file: {e}")
@@ -132,34 +109,20 @@ def extract_text_from_file(file_bytes: bytes, filename: str, postprocess: bool =
     text = text.strip()
     if postprocess:
         try:
-            text = process_text_ocr(text)   # hàm xử lý OCR của bạn
+            text = process_text_ocr(text)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"LLM postprocess failed: {e}")
-    
-    #----------- Lưu ra file TXT -----------
-    # folder_name = "cv"
-    # output_dir = os.path.join("output", folder_name)
-    # os.makedirs(output_dir, exist_ok=True)
 
-    # output_txt_path = os.path.join(output_dir, f"{path.stem}.txt")
-    # with open(output_txt_path, "w", encoding="utf-8") as f:
-    #     f.write(text)
-
-    
-    # ----------- Chuyển sang JSON + Lưu file -----------
+    # ----------- Parse JSON bằng LLM -----------
     if to_json:
         try:
             prompt = prompt_to_parse_cv(text)
             response = genai.GenerativeModel("gemini-2.5-flash").generate_content(prompt)
-            
+
             parsed_json = post_parse_cv(response.text)
-            print (parsed_json)
+            print(parsed_json)
             return parsed_json
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"LLM JSON parse failed: {e}")
 
     return text
-
-
-
-

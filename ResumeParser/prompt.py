@@ -10,7 +10,7 @@ Birth Year	N/A	Birth year of the candidate	birth_year	int
 Gender	N/A	Gender of the candidate	gender	string
 Email	N/A	Email address of the candidate	email	string
 Address	N/A	Address of the candidate	address	string
-Current Title	N/A	Current job title of the candidate	candidate_title	string
+Candidate Title	N/A	Current job title of the candidate	candidate_title	string
 Summary	N/A	A summary of the resume (generated)	summary	string
 Links	N/A	External internet links if available	links	list of string
 Languages			languages	list of dict
@@ -146,6 +146,7 @@ def prompt_to_parse_cv(resume): # yêu cầu GPT sinh ra file json theo format c
     If birth year, gender, email, or address are missing, simply skip those fields (do not invent).
     The email can be lack of "@" or "." due to OCR error, try to fix it if possible.
     If phone number is missing, simply skip this field (do not invent).
+   
     Answer format:
 
     SR:

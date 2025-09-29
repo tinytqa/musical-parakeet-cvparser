@@ -1,7 +1,6 @@
 import re
 
 
-
 def fix_spacing(text: str) -> str:
     # xóa nhiều khoảng trắng, tab, newline dư thừa
     text = re.sub(r'\s+', ' ', text)

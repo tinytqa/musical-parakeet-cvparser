@@ -36,7 +36,6 @@ def save_chunks_to_files(chunks: List[str], output_dir: str):
     print(f"Đã lưu {len(chunks)} chunks vào thư mục: {chunks_dir}")
 
 
-# --- Hàm chunk_text được cập nhật ---
 def chunk_text(text: str, output_dir: str = None) -> Optional[List[str]]:
     """
     Hàm 1: Nhận vào văn bản và chia thành các đoạn nhỏ (chunks).
@@ -48,9 +47,16 @@ def chunk_text(text: str, output_dir: str = None) -> Optional[List[str]]:
         
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=1000,
-        chunk_overlap=150,
+        chunk_overlap=150, #chunk overlap để giữ ngữ cảnh
         length_function=len
     )
+        # "Recursive" nghĩa là nó sẽ chia theo nhiều mức độ:
+        # ưu tiên tách theo ngắt đoạn (newline \n)
+        # nếu chưa đủ thì tách theo câu (dấu chấm, dấu chấm hỏi...)
+        # nếu vẫn dài quá thì mới tách theo ký tự.
+        # Mục tiêu là giữ được cấu trúc tự nhiên của văn bản (tránh cắt câu giữa chừng nếu không cần thiết).
+
+
     chunks = text_splitter.split_text(text)
     
     if not chunks:
@@ -66,6 +72,7 @@ def chunk_text(text: str, output_dir: str = None) -> Optional[List[str]]:
             
     return chunks
 
+#create vector database
 def create_vector_store(chunks: List[str]) -> Optional[FAISS]:
     """
     Hàm 2: Nhận vào các chunks, vector hóa và tạo ra một Vector Store (FAISS).
@@ -83,23 +90,18 @@ def create_vector_store(chunks: List[str]) -> Optional[FAISS]:
         return None
 
 def create_qa_chain(vector_store: FAISS):
-    """
-    Hàm 3: Nhận vào Vector Store và tạo ra chuỗi hỏi-đáp
-    KHÔNG dùng buffer memory (chỉ trả lời độc lập từng câu).
-    """
+    
     try:
         llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash", 
-            temperature=0.3,
+            temperature=0.1, # random level in generating text process
             google_api_key=api_key
         )
         
         prompt_template = """
         You are a professional AI recruitment assistant.
         Your mission is to answer questions about the candidate accurately and concisely, based only on the provided CV context below.
-
         First, identify the language of the user's question. Your final answer must be in the same language as the question.
-
         If the requested information is not found in the CV, you must state that you cannot find the answer from the CV. Do not make up answers.
 
         CV Context:
@@ -116,7 +118,7 @@ def create_qa_chain(vector_store: FAISS):
         qa_chain = RetrievalQA.from_chain_type(
             llm=llm,
             retriever=vector_store.as_retriever(),
-            chain_type="stuff",
+            chain_type="stuff", #đưa tất cả vào prompt
             chain_type_kwargs={"prompt": PROMPT}
         )
         
@@ -128,9 +130,6 @@ def create_qa_chain(vector_store: FAISS):
 
 
 def build_rag_pipeline(cv_text: str, output_dir: str = None):
-    """
-    Hàm chính: Điều phối toàn bộ quy trình.
-    """
     # Truyền output_dir vào hàm chunk_text
     chunks = chunk_text(cv_text, output_dir)
     if chunks is None:
@@ -143,3 +142,5 @@ def build_rag_pipeline(cv_text: str, output_dir: str = None):
     qa_chain = create_qa_chain(vector_store)
     
     return qa_chain
+
+
