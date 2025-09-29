@@ -140,7 +140,7 @@ def prompt_to_parse_cv(resume): # yêu cầu GPT sinh ra file json theo format c
     Note: The entire resume output must be consistent in one single language, exactly matching the original language of the resume (e.g., if the resume is written in Vietnamese, all fields must be in Vietnamese; if in English, all fields must be in English). Do not mix languages or translate.
     Note: The field "responsibilities" should be copied exactly from the resume.
     Note: The field "school" must be copied exactly as it appears in the resume. Do not modify, add, or normalize the school name in any way.
-    Note: If the description is not provided, write a summary for the field description in the same language as the resume.
+    Note: If the edu_description is not provided, write a summary for the field description in the same language as the resume.
     Note: The field "language level" must be in one of the following formats: native, fluent, proficient, intermediate, basic. Do not use any other formats. 
     The languge level must match the original language of the resume (e.g., if the resume is in Vietnamese, the language level must also be in Vietnamese).
     If birth year, gender, email, or address are missing, simply skip those fields (do not invent).
