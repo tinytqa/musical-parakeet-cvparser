@@ -299,23 +299,30 @@ def submit_form(uploaded_file_bytes=None, uploaded_file_type=None):
 
     st.session_state['output_json'] = export
 
-    # ===== Tạo folder output =====
-    candidate_name = export["candidate_name"].replace(" ", "_") or "unknown"
-    output_dir = os.path.join("output", f"cv_{candidate_name}")
+    if uploaded_file is not None:
+    # Lấy tên file gốc từ file upload
+        cv_name = os.path.splitext(uploaded_file.name)[0]  # tên file không có đuôi
+        candidate_name = export.get("candidate_name", "").replace(" ", "_") or "unknown"
 
-    if os.path.exists(output_dir):
-        try:
-            shutil.rmtree(output_dir)
-        except PermissionError:
-            st.warning(f"Không thể xóa folder cũ: {output_dir}, có thể đang mở ở nơi khác!")
+        # Tạo folder output/<tên file upload>/cv_<candidate_name>
+        output_dir = os.path.join("output", cv_name, f"cv_{candidate_name}")
 
+        # Xóa folder cũ nếu tồn tại
+        if os.path.exists(output_dir):
+            try:
+                shutil.rmtree(output_dir)
+            except PermissionError:
+                st.warning(f"Không thể xóa folder cũ: {output_dir}, có thể đang mở ở nơi khác!")
+
+    # Tạo folder mới
     os.makedirs(output_dir, exist_ok=True)
 
     # ===== Lưu JSON =====
-    with open(os.path.join(output_dir, "export_resume.json"), "w", encoding="utf-8") as f:
+    json_path = os.path.join(output_dir, "export_resume.json")
+    with open(json_path, "w", encoding="utf-8") as f:
         json.dump(export, f, ensure_ascii=False, indent=4)
-    # ===== Lưu TXT cho chatbot =====
 
+    # ===== Lưu TXT cho chatbot =====
     txt_path = os.path.join(output_dir, "export_resume_for_chatbot.txt")
     with open(txt_path, "w", encoding="utf-8") as f:
         # Thông tin cơ bản
@@ -674,7 +681,7 @@ if st.session_state.get('processed', False):
                                                                     key=f"edu_description_{i}",)
                     st.markdown("""---""")
 
-        with st.expander(label="PROJECTS", expanded=True,):
+        with st.expander(label="PROJECTS", expanded=True):
             projects = st.session_state['parsed_pdf'].get('projects', [])
             autofilled_projects = deepcopy(projects)
             if len(projects) > 0:

@@ -112,6 +112,23 @@ def extract_text_from_file(file_bytes: bytes, filename: str, postprocess: bool =
             text = process_text_ocr(text)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"LLM postprocess failed: {e}")
+   # ----------- Save raw text vào folder output theo tên CV -----------
+
+    cv_name = path.stem  
+    save_dir = Path("output") / cv_name
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    raw_text_path = save_dir / "raw_text.md"
+    try:
+        with open(raw_text_path, "w", encoding="utf-8") as f:
+            f.write("# Raw Text Extracted from CV\n\n")
+            f.write("```\n")
+            f.write(text.strip())
+            f.write("\n```")
+        print(f"✅ Raw CV text saved to {raw_text_path}")
+    except Exception as e:
+        print("⚠️ Could not save raw text:", e)
+
 
     # ----------- Parse JSON bằng LLM -----------
     if to_json:
