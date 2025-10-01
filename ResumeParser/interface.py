@@ -16,9 +16,9 @@ from text_extraction import extract_text_from_file
 from llm_utils import call_gemini
 from rag import build_rag_pipeline
 from docx2pdf import convert  # Add this import for DOCX to PDF conversion
+# Place this entire block after your imports at the top of your script
 
-
-# (Ngay sau các dòng import của bạn)
+# Custom CSS
 
 st.markdown("""
 <style>
@@ -38,7 +38,6 @@ st.markdown("""
         font-size: 24px;       /* Kích thước chữ hoặc icon bên trong nút */
         box-shadow: 2px 2px 8px rgba(0,0,0,0.2); /* Đổ bóng, tạo hiệu ứng nổi */
     }
-</style>
 """, unsafe_allow_html=True)
 
 
@@ -110,29 +109,6 @@ def infer_more_skills():
 
     st.session_state['new_skills'] = new_skills
 
-
-# def display_file(file_bytes: bytes, file_type: str):
-#     """
-#     Preview file (chỉ còn xử lý PDF). 
-#     Nếu là DOCX thì convert sang PDF trước rồi hiển thị như PDF.
-#     """
-#     if file_type.lower() == "docx":
-#         file_bytes = convert_docx_to_pdf(file_bytes)
-#         file_type = "pdf"
-
-#     if file_type.lower() == "pdf":
-#         doc = fitz.open(stream=file_bytes, filetype="pdf")
-#         image_list = []
-#         for i, page in enumerate(doc):
-#             pix = page.get_pixmap(dpi=150)
-#             img_bytes = pix.tobytes("png")
-#             image_list.append(img_bytes)
-#         doc.close()
-#         st.image(image_list)
-#     else:
-#         st.warning("File type is not supported.")
-
-#     st.session_state['uploaded'] = True
 
 def convert_docx_to_pdf(file_bytes):
     # Tạo file tạm docx
@@ -470,20 +446,10 @@ init_state('uploaded', False)
 init_state('processed', False)
 init_state('output_json', None)
 
-st.set_page_config(page_title="Resume Parser", page_icon="📑")
-st.title("📑 Resume Parser",)
 
-# Inject custom CSS to set the width of the sidebar
-st.markdown(
-    """
-    <style>
-        section[data-testid="stSidebar"] {
-            width: 100% !important; # Set the width to your desired value
-        }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+st.set_page_config(page_title="Resume Parser", page_icon="📑")
+st.title("📑 Resume Parser")
+
 
 # st.button("Restart", on_click="restart")
 #upload file
@@ -506,22 +472,29 @@ with st.sidebar:
 
 if uploaded_file is not None and not st.session_state.get('processed', False):
     # Trạng thái: đang xử lý
-    status_process = st.status("Processing the resume ...", expanded=True)
-    uploaded_file.seek(0)
-    file_bytes = uploaded_file.read()
-    filename = uploaded_file.name
+    status_placeholder = st.empty()
+    with status_placeholder:
+        status_process = st.status("Processing the resume ...", expanded=True)
+        uploaded_file.seek(0)
+        file_bytes = uploaded_file.read()
+        filename = uploaded_file.name
 
-    status_process.write("👩‍💻 Analyzing the resume ...")
-    parsed_data = extract_text_from_file(file_bytes, filename)
+        status_process.write("👩‍💻 Analyzing the resume ...")
+        parsed_data = extract_text_from_file(file_bytes, filename)
 
-    st.session_state['parsed_pdf'] = parsed_data
-    st.session_state['processed'] = True
-    status_process.update(label="Completed", state="complete", expanded=False)
-
+        st.session_state['parsed_pdf'] = parsed_data
+        st.session_state['processed'] = True
+        #status_process.update(label="Completed", state="complete", expanded=False)
+        status_process.update(label="Completed", state="complete", expanded=False)
+        st.success("Resume processed! You can edit the information now.", icon="✅")
+    status_placeholder.empty()
 # Nếu đã xử lý xong thì hiển thị form nhập liệu
-if st.session_state.get('processed', False):
-    status_edit = st.status("✍️ Editing the resume ...", expanded=True)
-    tab_info, tab_chat = st.tabs(["📄 Resume Info", "🤖 Chatbot"])
+
+if st.session_state.get('processed', False): 
+    header = st.container()
+    with header:
+        tab_info, tab_chat = st.tabs(["📄 Resume Info", "🤖 Chatbot"])
+        st.write("""<div class='fixed-header'/>""", unsafe_allow_html=True)
     with tab_info:
         with st.expander(label="INFORMATION", expanded=True):
             st.markdown("""---""")
@@ -769,7 +742,8 @@ if st.session_state.get('processed', False):
                             mime="docx",
                             on_click=downloader_callback, key="export")
         if st.session_state.get('output_json') is not None:
-            status_edit.update(label="Completed", state="complete", expanded=False)
+            # status_edit.update(label="Completed", state="complete", expanded=False)
+            st.toast("You can export the resume now!", icon="🖨️")
     
     with tab_chat:
 
@@ -797,6 +771,18 @@ if st.session_state.get('processed', False):
 
                 # Lấy câu trả lời
                 with st.spinner("Thinking..."):
+                    retriever = st.session_state.qa_chain.retriever
+
+                    # 2. Gọi retriever một cách riêng biệt ĐỂ LẤY DOCS
+                    retrieved_docs = retriever.get_relevant_documents(prompt)
+
+                    # 3. BÂY GIỜ MỚI IN RA ĐỂ DEBUG
+                    print("="*50)
+                    print("CONTEXT RETRIEVED FOR THE LLM:")
+                    for i, doc in enumerate(retrieved_docs):
+                        print(f"--- Document {i+1} ---\n{doc.page_content}\n")
+                    print("="*50)
+                    
                     response = st.session_state.qa_chain({
                         "query": prompt,
                         "chat_history": [
@@ -805,6 +791,7 @@ if st.session_state.get('processed', False):
                             if m["role"] in ["user", "assistant"]
                         ]
                     })
+                
                     answer = response["result"]
 
                 # Lưu bot answer
@@ -817,4 +804,4 @@ if st.session_state.get('processed', False):
         
 
             # Đóng thẻ div
-            st.markdown('</div>', unsafe_allow_html=True)
+        #st.markdown('</div>', unsafe_allow_html=True)

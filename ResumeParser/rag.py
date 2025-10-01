@@ -78,7 +78,7 @@ def create_vector_store(chunks: List[str]) -> Optional[FAISS]:
     Hàm 2: Nhận vào các chunks, vector hóa và tạo ra một Vector Store (FAISS).
     """
     try:
-        embedding_model = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
+        embedding_model = SentenceTransformerEmbeddings(model_name="paraphrase-multilingual-MiniLM-L12-v2")
         
         # LangChain sẽ tự động dùng model này để tạo vector store
         vector_store = FAISS.from_texts(texts=chunks, embedding=embedding_model)
@@ -117,7 +117,7 @@ def create_qa_chain(vector_store: FAISS):
         
         qa_chain = RetrievalQA.from_chain_type(
             llm=llm,
-            retriever=vector_store.as_retriever(),
+            retriever=vector_store.as_retriever(search_kwargs={'k': 8}),
             chain_type="stuff", #đưa tất cả vào prompt
             chain_type_kwargs={"prompt": PROMPT}
         )
