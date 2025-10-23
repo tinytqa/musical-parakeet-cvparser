@@ -10,7 +10,7 @@ from docx import Document
 import fitz
 import streamlit as st
 import re
-from filtering_cv import rank_with_bm25_and_sbert
+from filtering_cv import rank_with_bm25_and_sbert, rerank_skills_with_cohere
 from jd_prompt import post_parse_jd
 from export_resume import create_docx_file, post_process
 from prompt import post_add_skills, post_rewrite_task, post_write_description, prompt_to_add_skills, prompt_to_rewrite_task, prompt_to_write_description
@@ -19,7 +19,6 @@ from llm_utils import call_gemini
 from rag import build_rag_pipeline
 import pythoncom
 import threading
-
 
 from docx2pdf import convert  # Add this import for DOCX to PDF conversion
 # Place this entire block after your imports at the top of your script
@@ -1027,63 +1026,115 @@ if st.session_state.page == 'Filter CVs':
                     skills_default = str(skills_data)
 
                 # ----- Form chỉnh sửa -----
-                st.markdown("### 📝 Review & Edit Extracted JD Information")
+                # --- Form chính để chỉnh sửa JD và lưu lại ---
+            st.markdown("### 📝 Review & Edit Extracted JD Information")
 
-                with st.form("jd_edit_form"):
-                    required_experience_years = st.number_input(
-                        "Required Experience (Years)",
-                        min_value=0,
-                        value=required_experience_years_default
-                    )
+            # --- Form chỉnh sửa JD hiện tại ---
+            with st.form(f"jd_edit_form_{key}"):
 
-                    required_education = st.text_area(
-                        "Required Education",
-                        required_education_default
-                    )
+                # ---- Required Experience ----
+                required_experience_years = st.number_input(
+                    "Required Experience (Years)",
+                    min_value=0,
+                    value=required_experience_years_default
+                )
 
-                    skills_input = st.text_area(
-                        "Skills (comma-separated)",
-                        skills_default
-                    )
+                # ---- Required Education ----
+                required_education = st.text_area(
+                    "Required Education",
+                    required_education_default
+                )
 
-                    submitted = st.form_submit_button("💾 Save JD Info")
+                # ---- Skills Section ----
+                st.markdown("#### 🧠 Skills & Weights")
 
-                    if submitted:
-                        # xóa file JD từ lần up trước đó
-                        
-                        output_dir = "output/extracted_json/jd"
-                        os.makedirs(output_dir, exist_ok=True) # Ensure directory exists
-                        safe_name = re.sub(r'[^A-Za-z0-9_.-]', '_', key)
-                        old_save_path = os.path.join(output_dir, f"jd_final_{safe_name}.json")
-                        if os.path.exists(old_save_path):
-                            try:
-                                os.remove(old_save_path)
-                                st.info(f"Removed old JD file: {old_save_path}")
-                            except Exception as e:
-                                st.warning(f"Could not remove old JD file {old_save_path}: {e}")
-                        
-                        jd_final = {
-                            "required_experience_years": int(required_experience_years),
-                            "required_education": required_education.strip(),
-                            "skills": [s.strip() for s in skills_input.split(",") if s.strip()]
-                        }
+                skills_data = jd_parsed.get("skills", {})
+                if not isinstance(skills_data, dict):
+                    skills_data = {}
 
-                        # update session_state
-                        st.session_state.jd_parsed[key] = jd_final
+                updated_skills = {}
 
-                        # --- Ghi file JSON ---
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    st.markdown("**Skill Name**")
+                with col2:
+                    st.markdown("**Weight (1–5)**")
+
+                for skill, weight in skills_data.items():
+                    c1, c2 = st.columns([2, 1])
+                    with c1:
+                        skill_name = st.text_input(
+                            f"Skill name: {skill}",
+                            value=skill,
+                            key=f"skill_name_{key}_{skill}"
+                        )
+                    with c2:
+                        skill_weight = st.number_input(
+                            f"Weight for {skill}",
+                            min_value=1, max_value=5, value=int(weight), step=1,
+                            key=f"skill_weight_{key}_{skill}"
+                        )
+                    updated_skills[skill_name.strip()] = skill_weight
+
+                # ---- Nút lưu form ----
+                submitted = st.form_submit_button("💾 Save JD Info")
+
+                if submitted:
+                    output_dir = "output/extracted_json/jd"
+                    os.makedirs(output_dir, exist_ok=True)
+                    safe_name = re.sub(r'[^A-Za-z0-9_.-]', '_', key)
+
+                    save_path = os.path.join(output_dir, f"jd_final_{safe_name}.json")
+                    jd_final = {
+                        "required_experience_years": int(required_experience_years),
+                        "required_education": required_education.strip(),
+                        "skills": updated_skills
+                    }
+
+                    with open(save_path, "w", encoding="utf-8") as f:
+                        json.dump(jd_final, f, ensure_ascii=False, indent=4)
+
+                    st.session_state.jd_parsed[key] = jd_final
+                    st.toast("✅ JD information saved successfully!")
+
+            # --- Form riêng để thêm skill mới ---
+            st.markdown("---")
+            st.markdown("### ➕ Add new skill")
+
+            with st.form(f"add_skill_form_{key}"):
+                new_skill = st.text_input("New skill name", key=f"new_skill_name_{key}")
+                new_weight = st.number_input(
+                    "Weight (1–5)", min_value=1, max_value=5, value=3, step=1, key=f"new_skill_weight_{key}"
+                )
+                add_submitted = st.form_submit_button("Add Skill")
+
+                if add_submitted:
+                    if new_skill.strip():
+                        # Cập nhật vào session
+                        jd_parsed.setdefault("skills", {})[new_skill.strip()] = new_weight
+                        st.session_state.jd_parsed[key] = jd_parsed
+
+                        # Ghi file JSON ngay
                         output_dir = "output/extracted_json/jd"
                         os.makedirs(output_dir, exist_ok=True)
                         safe_name = re.sub(r'[^A-Za-z0-9_.-]', '_', key)
                         save_path = os.path.join(output_dir, f"jd_final_{safe_name}.json")
 
+                        jd_final = {
+                            "required_experience_years": int(required_experience_years),
+                            "required_education": required_education.strip(),
+                            "skills": jd_parsed["skills"]
+                        }
+
                         with open(save_path, "w", encoding="utf-8") as f:
                             json.dump(jd_final, f, ensure_ascii=False, indent=4)
 
-                        st.toast("✅ JD information saved successfully!")
-                        #st.info(f"Saved to {save_path}")
-                    #xóa file cũ khi chạy lại 
-                    # --- Nút lưu toàn bộ CV ---
+                        st.success(f"✅ Added new skill: {new_skill} ({new_weight})")
+                        st.rerun()
+                    else:
+                        st.warning("Please enter a skill name.")
+
+
 
     # 3. Nút bấm để bắt đầu quá trình lọc
     if st.button("Start Filtering CVs"):
@@ -1110,6 +1161,8 @@ if st.session_state.page == 'Filter CVs':
                     #     st.write(f"{i}. **{cv_name}** — Cosine similarity: `{score:.4f}`")
 
                     # === Cohere Results ===
+                    
+
                     st.markdown("### Top 3 CVs")
                     for i, (cv_name, score) in enumerate(data["cohere"], 1):
                         st.write(f"{i}. **{cv_name}** — Relevance score: `{score:.4f}`")

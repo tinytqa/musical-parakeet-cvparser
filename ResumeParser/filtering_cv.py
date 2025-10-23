@@ -99,137 +99,173 @@ def experience_alignment_score(jd_exp, cv_exp):
   return round(exp_align, 2)
 
 
+def rerank_skills_with_cohere(jd_skills, cv_skills, jd_skill_weights, co):
+    """
+    Dùng Cohere Rerank để so khớp kỹ năng JD ↔ CV.
+    Trả về tổng điểm có trọng số và debug chi tiết skill nào khớp.
+    """
+    # 💡 Loại bỏ kỹ năng rỗng hoặc chỉ có khoảng trắng
+    cv_skills = [s.strip() for s in cv_skills if isinstance(s, str) and s.strip()]
+    jd_skills = [s.strip() for s in jd_skills if isinstance(s, str) and s.strip()]
+
+    if not cv_skills or not jd_skills:
+        return 0.0, [{"warning": "No valid skills found in JD or CV"}]
+
+    total_score = 0
+    total_weight = sum(jd_skill_weights.values()) or 1
+    skill_debug = []
+
+    for jd_skill in jd_skills:
+        jd_weight = jd_skill_weights.get(jd_skill, 1)
+
+        try:
+            response = co.rerank(
+                model="rerank-v3.5",
+                query=jd_skill,
+                documents=cv_skills,
+                top_n=1
+            )
+            best_result = response.results[0]
+            best_cv_skill = cv_skills[best_result.index]
+            best_score = best_result.relevance_score
+
+        except Exception as e:
+            print(f"⚠️ Cohere error for skill '{jd_skill}': {e}")
+            best_cv_skill = None
+            best_score = 0.0
+
+        weighted = best_score * jd_weight
+        total_score += weighted
+
+        skill_debug.append({
+            "jd_skill": jd_skill,
+            "matched_cv_skill": best_cv_skill,
+            "score": round(best_score, 3),
+            "weight": jd_weight,
+            "weighted_score": round(weighted, 3)
+        })
+
+    normalized_score = total_score / total_weight
+    return normalized_score, skill_debug
+
+
+
 def rank_with_bm25_and_sbert(
-  jd_folder="output/extracted_json/jd",
-  cv_folder="output/extracted_json/cv",
-  top_k_bm25=6,
-  top_k_sbert=4,
-  top_k_cohere=3
+    jd_folder="output/extracted_json/jd",
+    cv_folder="output/extracted_json/cv",
+    top_k_bm25=6,
+    top_k_sbert=4,
+    top_k_cohere=3
 ):
-  results = {}
+    results = {}
 
-  jd_files = load_json_files(jd_folder)
-  cv_files = load_json_files(cv_folder)
+    jd_files = load_json_files(jd_folder)
+    cv_files = load_json_files(cv_folder)
 
-  for jd_name, jd_data in jd_files:
-    print(f"\n🧩 Processing JD: {jd_name}")
-    jd_text = " ".join(map(str, jd_data.values())).lower()
-    jd_tokens = word_tokenize(jd_text)
+    for jd_name, jd_data in jd_files:
+        print(f"\n🧩 Processing JD: {jd_name}")
+        jd_text = " ".join(map(str, jd_data.values())).lower()
+        jd_tokens = word_tokenize(jd_text)
 
-    # === Build CV corpus ===
-    cv_corpus, cv_names = [], []
-    for cv_name, cv_data in cv_files:
-      text = " ".join(map(str, cv_data.values())).lower()
-      tokens = word_tokenize(text)
-      cv_corpus.append(tokens)
-      cv_names.append(cv_name)
+        # === Build CV corpus ===
+        cv_corpus, cv_names = [], []
+        for cv_name, cv_data in cv_files:
+            text = " ".join(map(str, cv_data.values())).lower()
+            tokens = word_tokenize(text)
+            cv_corpus.append(tokens)
+            cv_names.append(cv_name)
 
-    # === Run BM25 ===
-    bm25 = BM25Okapi(cv_corpus)
-    scores = bm25.get_scores(jd_tokens)
-    ranked = sorted(zip(cv_names, scores), key=lambda x: x[1], reverse=True)
-    top_bm25 = ranked[:top_k_bm25]
+        # === Run BM25 ===
+        bm25 = BM25Okapi(cv_corpus)
+        scores = bm25.get_scores(jd_tokens)
+        ranked = sorted(zip(cv_names, scores), key=lambda x: x[1], reverse=True)
+        top_bm25 = ranked[:top_k_bm25]
 
-    print("🔍 Top CVs theo BM25:")
-    for i, (cv_name, score) in enumerate(top_bm25, 1):
-      cv_index = cv_names.index(cv_name)
-      cv_tokens = cv_corpus[cv_index]
-      common_tokens = set(jd_tokens) & set(cv_tokens)
-      print(f" {i}. {cv_name} — BM25 score: {score:.3f} | Matching keywords: {list(common_tokens)}")
+        print("🔍 Top CVs theo BM25:")
+        for i, (cv_name, score) in enumerate(top_bm25, 1):
+            cv_index = cv_names.index(cv_name)
+            cv_tokens = cv_corpus[cv_index]
+            common_tokens = set(jd_tokens) & set(cv_tokens)
+            print(f" {i}. {cv_name} — BM25 score: {score:.3f} | Matching keywords: {list(common_tokens)}")
 
-    # === SBERT reranking ===
-    top_cv_texts = []
-    for cv_name, _ in top_bm25:
-      cv_data = dict(next(cv for cv in cv_files if cv[0] == cv_name)[1])
-      cv_text = " ".join(map(str, cv_data.values()))
-      top_cv_texts.append(cv_text)
+        # === SBERT reranking ===
+        top_cv_texts = []
+        for cv_name, _ in top_bm25:
+            cv_data = dict(next(cv for cv in cv_files if cv[0] == cv_name)[1])
+            cv_text = " ".join(map(str, cv_data.values()))
+            top_cv_texts.append(cv_text)
 
-    jd_embedding = sbert_model.encode(jd_text, convert_to_tensor=True)
-    cv_embeddings = sbert_model.encode(top_cv_texts, convert_to_tensor=True)
-    cosine_scores = util.cos_sim(jd_embedding, cv_embeddings)[0]
+        jd_embedding = sbert_model.encode(jd_text, convert_to_tensor=True)
+        cv_embeddings = sbert_model.encode(top_cv_texts, convert_to_tensor=True)
+        cosine_scores = util.cos_sim(jd_embedding, cv_embeddings)[0]
 
-    sbert_ranked = sorted(
-      zip([cv for cv, _ in top_bm25], cosine_scores),
-      key=lambda x: x[1],
-      reverse=True
-    )
+        sbert_ranked = sorted(
+            zip([cv for cv, _ in top_bm25], cosine_scores),
+            key=lambda x: x[1],
+            reverse=True
+        )
 
-    print("\n💡 SBERT reranking:")
-    for i, (cv_name, score) in enumerate(sbert_ranked, 1):
-      print(f" {i}. {cv_name} — Cosine similarity: {float(score):.4f}")
-    cv_data = dict(next(cv for cv in cv_files if cv[0] == cv_name)[1])
-    short_preview = textwrap.shorten(" ".join(map(str, cv_data.values())), width=120)
-    print(f"   Preview: {short_preview}")
+        print("\n💡 SBERT reranking:")
+        for i, (cv_name, score) in enumerate(sbert_ranked, 1):
+            print(f" {i}. {cv_name} — Cosine similarity: {float(score):.4f}")
+            cv_data = dict(next(cv for cv in cv_files if cv[0] == cv_name)[1])
+            short_preview = textwrap.shorten(" ".join(map(str, cv_data.values())), width=120)
+            print(f"   Preview: {short_preview}")
 
-    # === Cohere Reranking ===
-    print("\n🔥 Cohere Rerank (final stage):")
-    top_cv_texts_for_cohere = []
-    for cv_name, _ in sbert_ranked[:top_k_sbert]:
-      cv_data = dict(next(cv for cv in cv_files if cv[0] == cv_name)[1])
-      cv_text = " ".join(map(str, cv_data.values()))
-      top_cv_texts_for_cohere.append(cv_text)
+        jd_skills = jd_data.get("skills", [])
+        jd_skill_weights = jd_data.get("skill_weights", {})
 
-    response = co.rerank(
-      model="rerank-v3.5",
-      query=jd_text,
-      documents=top_cv_texts_for_cohere,
-      top_n=top_k_cohere
-    )
-    
-    cohere_ranked = [
-      (sbert_ranked[result.index][0], result.relevance_score)
-      for result in response.results
-    ]
-    adjusted_ranked = []
-    
+        jd_results = []
 
-    jd_exp = get_experience_from_json(jd_data)
-    print(f" JD: {jd_name} | Extracted Experience: {jd_exp} years")
+        for cv_name, _ in sbert_ranked[:top_k_sbert]:
+            cv_data = dict(next(cv for cv in cv_files if cv[0] == cv_name)[1])
+            cv_skills = cv_data.get("skills", [])
 
-    for cv_name, score in cohere_ranked:
-      cv_data = dict(next(cv for cv in cv_files if cv[0] == cv_name)[1])
-      cv_text = " ".join(map(str, cv_data.values()))
-      cv_exp = get_experience_from_json(cv_data)
-      print(f" CV: {cv_name} | Extracted Experience: {cv_exp} years")
-      exp_score = experience_alignment_score(jd_exp, cv_exp)
-      final = 0.8 * score + 0.2 * exp_score
-      adjusted_ranked.append((cv_name, final, score, exp_score))
+            # === Skill Matching với Cohere ===
+            skill_score, skill_debug = rerank_skills_with_cohere(jd_skills, cv_skills, jd_skill_weights, co)
 
-    # Sắp xếp lại
-    adjusted_ranked.sort(key=lambda x: x[1], reverse=True)
+            print("🧠 Skill Matching:")
+            for s in skill_debug:
+                jd_skill = s.get("jd_skill", "N/A")
+                matched_cv_skill = s.get("matched_cv_skill", "N/A")
+                score = s.get("score", 0)
+                weight = s.get("weight", 1)
+                print(f"     - {jd_skill} ↔ {matched_cv_skill} ({score:.3f}) [weight={weight}]")
 
-    print("\n🎯 Final rerank with experience adjustment:")
-    for i, (cv_name, final, s_score, e_score) in enumerate(adjusted_ranked, 1):
-      print(f" {i}. {cv_name} — Final: {final:.4f} | Cohere: {s_score:.4f} | ExpAlign: {e_score:.2f}")
 
-      #debug preview
-    
-    # cohere_ranked = []
-    # for i, result in enumerate(response):
-    #   if isinstance(result, dict):
-    #     score = result.get("score") or result.get("relevance_score")
-    #   elif hasattr(result, "score"):
-    #     score = result.score
-    #   elif isinstance(result, (tuple, list)) and len(result) >= 2:
-    #     score = result[1]
-    #   else:
-    #     score = float(result)
+                        # === Tính điểm tổng hợp ===
+   
 
-    #   cohere_ranked.append((sbert_ranked[i][0], float(score)))
+            jd_exp = get_experience_from_json(jd_data)
+            cv_exp = get_experience_from_json(cv_data)
+            exp_score = experience_alignment_score(jd_exp, cv_exp)
 
-    # for i, (cv_name, score) in enumerate(cohere_ranked, 1):
-    #   print(f" {i}. {cv_name} — MixedBread relevance: {score:.4f}")
+            final_score = 0.8 * skill_score + 0.2 * exp_score
 
-    # === Save results ===
-    results[jd_name] = {
-      "bm25": [(cv, float(score)) for cv, score in top_bm25],
-      "sbert": [(cv, float(score)) for cv, score in sbert_ranked[:top_k_sbert]],
-      "cohere": [(cv, float(score)) for cv, score in cohere_ranked]
-    }
+            print(f"📄 CV: {cv_name}")
+            print(f"   Skill Score: {skill_score:.3f}")
+            print(f"   Exp Align: {exp_score:.2f}")
+            print(f"   Final Score: {final_score:.3f}")
 
-  print("\n🎯 Kết quả cuối cùng:")
-  print(json.dumps(results, indent=2, ensure_ascii=False))
-  return results
+            jd_results.append({
+                "cv_name": cv_name,
+                "skills_matches": skill_matches,
+                "skill_score": round(skill_score, 3),
+                "exp_score": round(exp_score, 3),
+                "final_score": round(final_score, 3)
+            })
+
+        # === Save per-JD results ===
+        results[jd_name] = {
+            "bm25": [(cv, float(score)) for cv, score in top_bm25],
+            "sbert": [(cv, float(score)) for cv, score in sbert_ranked[:top_k_sbert]],
+            "skills": jd_results
+        }
+
+    print("\n🎯 Kết quả cuối cùng:")
+    print(json.dumps(results, indent=2, ensure_ascii=False))
+    return results
+
 
 
 

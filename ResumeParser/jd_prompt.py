@@ -81,3 +81,16 @@ def prompt_to_parse_jd(jd_text):
     """
 
     return prompt
+
+def post_parse_jd(output): # lọc ra json từ kết quả trả về của AI
+  
+    try:
+        start = output.find('{')
+        end = output.rfind('}') + 1
+        json_str = output[start:end]
+
+        # Chuyển chuỗi JSON thành dict
+        return json.loads(json_str)
+    
+    except json.JSONDecodeError:
+        return {"raw_text": output}
