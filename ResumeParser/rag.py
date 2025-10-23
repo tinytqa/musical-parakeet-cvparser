@@ -7,7 +7,7 @@ from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA, ConversationalRetrievalChain
 from langchain.prompts import PromptTemplate
 from langchain_community.embeddings import SentenceTransformerEmbeddings
-from typing import List, Optional # Thêm import để dùng type hints
+from typing import List, Optional 
 from langchain.memory import ConversationBufferMemory
 import os
 load_dotenv()

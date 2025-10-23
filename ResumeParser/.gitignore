@@ -6,6 +6,7 @@ venv/
 
 # Bỏ qua folder output
 output/
+file test/
 
 # Bỏ qua cache và log
 __pycache__/

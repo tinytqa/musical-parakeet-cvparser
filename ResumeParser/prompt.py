@@ -23,6 +23,7 @@ Work Experience			work_exp	list of dict
   Responsibilities	Responsibilities, achievements done, written in bullet points, copy from the resume work_responsibilities	list of string
   Technologies	tools, frameworks, techonologies used in the work experience	technologies  string
   Description Short summary of tasks, achievements, technology used, in maximum 30 words work_description	string
+Year of Experience  N/A  Total years of professional experience  total_experience_years  int
 Education			education	list of dict
 	Timeline	From - To	edu_timeline	tuple of int
 	School	School name	edu_school	string
@@ -83,6 +84,7 @@ example = """
       "work_description": "Collaborated with cross-functional teams to deliver high-quality software solutions."
     }
   ],
+  "years_of_experience": 8,
   "education": [
     {
       "edu_timeline": [2011, 2015],
@@ -146,7 +148,7 @@ def prompt_to_parse_cv(resume): # yêu cầu GPT sinh ra file json theo format c
     If birth year, gender, email, or address are missing, simply skip those fields (do not invent).
     The email can be lack of "@" or "." due to OCR error, try to fix it if possible.
     If phone number is missing, simply skip this field (do not invent).
-   
+    If the CV does not explicitly mention the total years of experience, estimate it by analyzing all job positions and date ranges (e.g., “May 2019 – now”, “Apr 2016 – Feb 2019”). Return the total experience in years as a number.
     Answer format:
 
     SR:
@@ -242,3 +244,6 @@ def prompt_to_add_skills(skills, resume_json, domain='IT'): #cải thiện skill
     return prompt
 
 def post_add_skills(output): return output[13:].strip()
+
+
+
