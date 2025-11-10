@@ -990,6 +990,7 @@ if st.session_state.page == 'Filter CVs':
                     st.info("Extracting JD information...")
                     # Trích text + parse (chỉ chạy 1 lần cho file này)
                     jd_text = get_text_from_file(file_bytes, jd_file.name, file_role="jd")
+                    print (jd_text)
                     jd_parsed = process_and_parse_jd(jd_text, jd_file.name)
                     print (jd_parsed)
                     st.session_state.jd_parsed[key] = jd_parsed
@@ -1158,7 +1159,7 @@ if st.session_state.page == 'Filter CVs':
 
                     st.markdown("#### 🎯 Final Results")
                     for i, item in enumerate(res["final_top"], 1):
-                        threshold = 75
+                        threshold = 70
                         if item.get('cohere_relevance_score', item['semantic_score']) >= threshold:
                             st.success(f"🏅 {i}. {item['cv_name']} — Final score: {item.get('cohere_relevance_score', item['semantic_score'])}%")
                     #Nếu item có trường cohere_relevance_score → dùng giá trị này.

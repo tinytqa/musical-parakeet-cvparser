@@ -183,14 +183,20 @@ def weighted_embedding_debug(skills_with_weights, model):
             #st.write(f"🔸 Embedding (first 5 dims): {np.round(emb[:5], 4).tolist()}")
 
     embeddings = np.array(embeddings)
-    weights = np.array(weights)
+    # weights = np.array(weights)
+    weights = np.array(weights, dtype=np.float32)
+    embeddings = np.array(embeddings, dtype=np.float32)
+    weighted_emb = np.average(embeddings, axis=0, weights=weights)
+
     norm_weights = weights / np.sum(weights)
 
     # Tính 2 loại embedding
     unweighted_emb = np.mean(embeddings, axis=0)
-    weighted_emb = np.average(embeddings, axis=0, weights=norm_weights)
-
+    # weighted_emb = np.average(embeddings, axis=0, weights=norm_weights)
+    print("Weighted embedding debug:", weighted_emb, unweighted_emb)
     return (
+        # unweighted_emb,
+        # weighted_emb
         torch.tensor(unweighted_emb, dtype=torch.float32),
         torch.tensor(weighted_emb, dtype=torch.float32),
     )
@@ -234,10 +240,10 @@ def rank_with_sbert(jd_folder="output/extracted_json/jd", cv_folder="output/extr
             
             # Gọi debug và lấy 2 embedding (chỉ chạy 1 lần)
             unweighted_emb, weighted_emb = weighted_embedding_debug(jd_data["skills"], model)
-
+            print("Weighted embedding computed: ", weighted_emb, unweighted_emb)
             # 👉 Gọi debug_weight_effect nhưng KHÔNG gọi lại weighted_embedding_debug bên trong
             cv_sample_text = " ".join(map(str, cv_files[0][1].values())).lower()
-            #debug_weight_effect(jd_data, cv_sample_text, model, unweighted_emb, weighted_emb)
+            # debug_weight_effect(jd_data, cv_sample_text, model, unweighted_emb, weighted_emb)
 
             # Sử dụng embedding có trọng số cho ranking chính
             jd_embedding = weighted_emb
@@ -266,10 +272,53 @@ def rank_with_sbert(jd_folder="output/extracted_json/jd", cv_folder="output/extr
             print(f"{i}. **{cv_name}** — SBERT score: {score_float:.3f}")
 
             # --- Skill-level comparison ---
-            cv_data = dict(next(cv for cv in cv_files if cv[0] == cv_name)[1])
-            jd_skills = jd_data.get("skills", [])
-            cv_candidate_skills = extract_candidate_skills_from_cv(cv_data)
+            # cv_data = dict(next(cv for cv in cv_files if cv[0] == cv_name)[1])
+            # jd_skills = jd_data.get("skills", [])
+            # cv_candidate_skills = extract_candidate_skills_from_cv(cv_data)
 
+            # if not cv_candidate_skills:
+            #     cv_text_parts = [
+            #         " ".join(map(str, cv_data.get("skills", []))),
+            #         " ".join(map(str, cv_data.get("projects", []))),
+            #         " ".join(map(str, cv_data.get("experience", []))),
+            #     ]
+            #     cv_candidate_skills = [" ".join(cv_text_parts).strip()]
+
+            # jd_skill_names = list(jd_skills.keys()) if isinstance(jd_skills, dict) else jd_skills
+            # jd_skills_clean = [normalize_skill(s).strip().lower() for s in jd_skill_names if s]
+            # cv_skills_clean = [normalize_skill(s).strip().lower() for s in cv_candidate_skills if s]
+
+            # matches = []
+            # if jd_skills_clean and cv_skills_clean:
+            #     with torch.no_grad():
+            #         jd_emb = model.encode(jd_skills_clean, convert_to_tensor=True, normalize_embeddings=True)
+            #         cv_emb = model.encode(cv_skills_clean, convert_to_tensor=True, normalize_embeddings=True)
+            #         sim_matrix = util.cos_sim(jd_emb, cv_emb)
+
+            #     threshold = 0.55
+            #     for idx_jd, jd_skill in enumerate(jd_skills_clean):
+            #         for idx_cv, cv_skill in enumerate(cv_skills_clean):
+            #             sim = float(sim_matrix[idx_jd][idx_cv])
+            #             if sim >= threshold:
+            #                 matches.append({
+            #                     "jd_skill": jd_skill,
+            #                     "cv_skill": cv_skill,
+            #                     "similarity": round(sim, 3)
+            #                 })
+
+            #     if matches:
+            #         print(f"🎯 Matched skills for {cv_name}:")
+            #         for m in matches:
+            #             print(f"- {m['jd_skill']} ↔ {m['cv_skill']} ({m['similarity']})")
+            #     else:
+            #         print(f"⚪ No skill matched for {cv_name}")
+            # else:
+            #     print(f"⚠️ No JD skills or CV candidate skills for {cv_name}")
+            # --- Skill-level comparison với trọng số ---
+            cv_data = dict(next(cv for cv in cv_files if cv[0] == cv_name)[1])
+            jd_skills = jd_data.get("skills", {})
+
+            cv_candidate_skills = extract_candidate_skills_from_cv(cv_data)
             if not cv_candidate_skills:
                 cv_text_parts = [
                     " ".join(map(str, cv_data.get("skills", []))),
@@ -283,11 +332,23 @@ def rank_with_sbert(jd_folder="output/extracted_json/jd", cv_folder="output/extr
             cv_skills_clean = [normalize_skill(s).strip().lower() for s in cv_candidate_skills if s]
 
             matches = []
+
             if jd_skills_clean and cv_skills_clean:
                 with torch.no_grad():
-                    jd_emb = model.encode(jd_skills_clean, convert_to_tensor=True, normalize_embeddings=True)
-                    cv_emb = model.encode(cv_skills_clean, convert_to_tensor=True, normalize_embeddings=True)
-                    sim_matrix = util.cos_sim(jd_emb, cv_emb)
+                    # Encode JD skills & CV skills
+                    jd_emb = model.encode(jd_skills_clean, convert_to_tensor=True, normalize_embeddings=True)  # (n_jd, dim)
+                    cv_emb = model.encode(cv_skills_clean, convert_to_tensor=True, normalize_embeddings=True)  # (n_cv, dim)
+
+                    # Lấy trọng số JD
+                    # weights = np.array([jd_skills[s] for s in jd_skill_names if s in jd_skills_clean], dtype=np.float32)
+                    # weights = torch.tensor(weights, dtype=torch.float32).unsqueeze(1)  # (n_jd, 1)
+                    weights_list = [jd_skills[s] for s in jd_skill_names]  # key gốc từ JSON
+                    weights = torch.tensor(weights_list, dtype=torch.float32).unsqueeze(1)  # (n_jd, 1)
+                    # Nhân embedding JD với trọng số
+                    jd_emb_weighted = jd_emb * weights
+
+                    # Cosine similarity
+                    sim_matrix = util.cos_sim(jd_emb_weighted, cv_emb)
 
                 threshold = 0.55
                 for idx_jd, jd_skill in enumerate(jd_skills_clean):
@@ -300,6 +361,7 @@ def rank_with_sbert(jd_folder="output/extracted_json/jd", cv_folder="output/extr
                                 "similarity": round(sim, 3)
                             })
 
+                # In log
                 if matches:
                     print(f"🎯 Matched skills for {cv_name}:")
                     for m in matches:

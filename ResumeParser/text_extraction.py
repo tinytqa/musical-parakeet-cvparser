@@ -25,10 +25,74 @@ api_key = os.getenv("api_key")
 genai.configure(api_key=api_key)
 
 import cv2
-def get_text_from_file(file_bytes: bytes, filename: str, file_role) -> str:
+# def get_text_from_file(file_bytes: bytes, filename: str, file_role) -> str:
+#     """
+#     Chỉ làm một việc: Chuyển đổi file (PDF, DOCX, có OCR) thành văn bản thô.
+#     Hàm này có thể dùng cho cả CV và JD.
+#     """
+#     path = Path(filename)
+#     text = ""
+
+#     # ----------- DOCX -> convert sang PDF bytes -----------
+#     if path.suffix.lower() == ".docx":
+#         file_bytes = convert_docx_to_pdf(file_bytes)
+#         file_type = "pdf"
+#     else:
+#         file_type = path.suffix.lower().lstrip(".")
+
+#     # ----------- PDF xử lý (bao gồm cả logic OCR) -----------
+#     if file_type == "pdf":
+#         if file_type == "pdf":
+#             try:
+#                 pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
+#                 ocr = easyocr.Reader(['vi'])  
+
+#                 for page in pdf_doc:
+#                     page_text = page.get_text("text").strip()
+#                     if page_text:
+#                         text += page_text + "\n"
+#                     else:
+#                         # PDF scan → OCR
+#                         pix = page.get_pixmap(matrix=fitz.Matrix(3, 3))
+#                         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+#                         pre_img = preprocess_for_easyocr(img)
+
+#                         try:
+#                             results = ocr.readtext(pre_img, detail=0, paragraph=True)
+#                             print("OCR raw results:", results)
+#                         except Exception as e:
+#                             raise HTTPException(status_code=400, detail=f"OCR failed: {e}")
+
+#                         if results:
+#                             text += "\n".join(results) + "\n"
+
+#                 pdf_doc.close()
+#             except Exception as e:
+#                 raise HTTPException(status_code=400, detail=f"Error processing PDF file: {e}")
+
+#     else:
+#         raise HTTPException(status_code=415, detail="Unsupported file type. Only DOCX and PDF are supported.")   
+    
+
+#     output_dir = Path("output") / file_role.lower()   # => output/jd hoặc output/cv
+#     output_dir.mkdir(parents=True, exist_ok=True)
+
+#     # Tên file md có timestamp để tránh trùng
+#     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+#     output_filename = output_dir / f"{path.stem}_{timestamp}.md"
+
+#     with open(output_filename, "w", encoding="utf-8") as f:
+#         f.write(text.strip())
+
+#     print(f"✅ Extracted text saved to: {output_filename}")
+
+#     return str(output_filename)
+
+def get_text_from_file(file_bytes: bytes, filename: str, file_role: str, return_path: bool = False) -> str:
     """
-    Chỉ làm một việc: Chuyển đổi file (PDF, DOCX, có OCR) thành văn bản thô.
-    Hàm này có thể dùng cho cả CV và JD.
+    Chuyển file (PDF, DOCX, có OCR) thành văn bản thô.
+    Nếu return_path=True → trả về đường dẫn file .md
+    Nếu return_path=False → trả về nội dung text
     """
     path = Path(filename)
     text = ""
@@ -42,42 +106,33 @@ def get_text_from_file(file_bytes: bytes, filename: str, file_role) -> str:
 
     # ----------- PDF xử lý (bao gồm cả logic OCR) -----------
     if file_type == "pdf":
-        if file_type == "pdf":
-            try:
-                pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
-                ocr = easyocr.Reader(['vi'])  
+        try:
+            pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
+            ocr = easyocr.Reader(['vi'])  
 
-                for page in pdf_doc:
-                    page_text = page.get_text("text").strip()
-                    if page_text:
-                        text += page_text + "\n"
-                    else:
-                        # PDF scan → OCR
-                        pix = page.get_pixmap(matrix=fitz.Matrix(3, 3))
-                        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                        pre_img = preprocess_for_easyocr(img)
+            for page in pdf_doc:
+                page_text = page.get_text("text").strip()
+                if page_text:
+                    text += page_text + "\n"
+                else:
+                    # PDF scan → OCR
+                    pix = page.get_pixmap(matrix=fitz.Matrix(3, 3))
+                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                    pre_img = preprocess_for_easyocr(img)
 
-                        try:
-                            results = ocr.readtext(pre_img, detail=0, paragraph=True)
-                            print("OCR raw results:", results)
-                        except Exception as e:
-                            raise HTTPException(status_code=400, detail=f"OCR failed: {e}")
+                    results = ocr.readtext(pre_img, detail=0, paragraph=True)
+                    text += "\n".join(results) + "\n"
 
-                        if results:
-                            text += "\n".join(results) + "\n"
-
-                pdf_doc.close()
-            except Exception as e:
-                raise HTTPException(status_code=400, detail=f"Error processing PDF file: {e}")
+            pdf_doc.close()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Error processing PDF file: {e}")
 
     else:
         raise HTTPException(status_code=415, detail="Unsupported file type. Only DOCX and PDF are supported.")   
     
-
-    output_dir = Path("output") / file_role.lower()   # => output/jd hoặc output/cv
+    # ----------- Lưu file .md -----------
+    output_dir = Path("output") / file_role.lower()
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Tên file md có timestamp để tránh trùng
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_filename = output_dir / f"{path.stem}_{timestamp}.md"
 
@@ -86,7 +141,9 @@ def get_text_from_file(file_bytes: bytes, filename: str, file_role) -> str:
 
     print(f"✅ Extracted text saved to: {output_filename}")
 
-    return str(output_filename)
+    # ----------- Trả kết quả tuỳ chọn -----------
+    return str(output_filename) if return_path else text.strip()
+
 
 def preprocess_for_easyocr(pil_img):
     img = np.array(pil_img.convert("RGB"))

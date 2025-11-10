@@ -26,7 +26,7 @@ async def extract_text(file: UploadFile = File(...), file_role: str = Form(...))
         file_bytes = await file.read()
         filename = file.filename
 
-        saved_path = get_text_from_file(file_bytes, filename, file_role)
+        saved_path = get_text_from_file(file_bytes, filename, file_role, return_path=True)
 
         # Đọc lại 2000 ký tự đầu để preview
         preview_text = ""
