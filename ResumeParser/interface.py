@@ -10,7 +10,7 @@ from docx import Document
 import fitz
 import streamlit as st
 import re
-from filtering_cv import rank_with_bm25_and_sbert, rerank_skills_with_cohere
+from filtering_cv import rank_with_bm25_and_sbert
 from jd_prompt import post_parse_jd
 from export_resume import create_docx_file, post_process
 from prompt import post_add_skills, post_rewrite_task, post_write_description, prompt_to_add_skills, prompt_to_rewrite_task, prompt_to_write_description
@@ -19,7 +19,7 @@ from llm_utils import call_gemini
 from rag import build_rag_pipeline
 import pythoncom
 import threading
-
+from filtering.pipeline import rank_combined
 from docx2pdf import convert  # Add this import for DOCX to PDF conversion
 # Place this entire block after your imports at the top of your script
 
@@ -853,7 +853,8 @@ if st.session_state.page == 'Filter CVs':
         st.session_state.cv_parsed = {}
 
     if uploaded_cvs:
-        with st.expander("Uploaded CVs", expanded=True):
+        expanded_state = "cv_parsed" not in st.session_state or not st.session_state.cv_parsed
+        with st.expander("Uploaded CVs", expanded=False):
             st.subheader("Preview uploaded CVs")
 
             cv_filenames = [cv.name for cv in uploaded_cvs]
@@ -1027,75 +1028,75 @@ if st.session_state.page == 'Filter CVs':
 
                 # ----- Form chỉnh sửa -----
                 # --- Form chính để chỉnh sửa JD và lưu lại ---
-            st.markdown("### 📝 Review & Edit Extracted JD Information")
+                st.markdown("### 📝 Review & Edit Extracted JD Information")
 
-            # --- Form chỉnh sửa JD hiện tại ---
-            with st.form(f"jd_edit_form_{key}"):
+                # --- Form chỉnh sửa JD hiện tại ---
+                with st.form(f"jd_edit_form_{key}"):
 
-                # ---- Required Experience ----
-                required_experience_years = st.number_input(
-                    "Required Experience (Years)",
-                    min_value=0,
-                    value=required_experience_years_default
-                )
+                    # ---- Required Experience ----
+                    required_experience_years = st.number_input(
+                        "Required Experience (Years)",
+                        min_value=0,
+                        value=required_experience_years_default
+                    )
 
-                # ---- Required Education ----
-                required_education = st.text_area(
-                    "Required Education",
-                    required_education_default
-                )
+                    # ---- Required Education ----
+                    required_education = st.text_area(
+                        "Required Education",
+                        required_education_default
+                    )
 
-                # ---- Skills Section ----
-                st.markdown("#### 🧠 Skills & Weights")
+                    # ---- Skills Section ----
+                    st.markdown("#### 🧠 Skills & Weights")
 
-                skills_data = jd_parsed.get("skills", {})
-                if not isinstance(skills_data, dict):
-                    skills_data = {}
+                    skills_data = jd_parsed.get("skills", {})
+                    if not isinstance(skills_data, dict):
+                        skills_data = {}
 
-                updated_skills = {}
+                    updated_skills = {}
 
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    st.markdown("**Skill Name**")
-                with col2:
-                    st.markdown("**Weight (1–5)**")
+                    col1, col2 = st.columns([2, 1])
+                    with col1:
+                        st.markdown("**Skill Name**")
+                    with col2:
+                        st.markdown("**Weight (1–5)**")
 
-                for skill, weight in skills_data.items():
-                    c1, c2 = st.columns([2, 1])
-                    with c1:
-                        skill_name = st.text_input(
-                            f"Skill name: {skill}",
-                            value=skill,
-                            key=f"skill_name_{key}_{skill}"
-                        )
-                    with c2:
-                        skill_weight = st.number_input(
-                            f"Weight for {skill}",
-                            min_value=1, max_value=5, value=int(weight), step=1,
-                            key=f"skill_weight_{key}_{skill}"
-                        )
-                    updated_skills[skill_name.strip()] = skill_weight
+                    for skill, weight in skills_data.items():
+                        c1, c2 = st.columns([2, 1])
+                        with c1:
+                            skill_name = st.text_input(
+                                f"Skill name: {skill}",
+                                value=skill,
+                                key=f"skill_name_{key}_{skill}"
+                            )
+                        with c2:
+                            skill_weight = st.number_input(
+                                f"Weight for {skill}",
+                                min_value=1, max_value=5, value=int(weight), step=1,
+                                key=f"skill_weight_{key}_{skill}"
+                            )
+                        updated_skills[skill_name.strip()] = skill_weight
 
-                # ---- Nút lưu form ----
-                submitted = st.form_submit_button("💾 Save JD Info")
+                    # ---- Nút lưu form ----
+                    submitted = st.form_submit_button("💾 Save JD Info")
 
-                if submitted:
-                    output_dir = "output/extracted_json/jd"
-                    os.makedirs(output_dir, exist_ok=True)
-                    safe_name = re.sub(r'[^A-Za-z0-9_.-]', '_', key)
+                    if submitted:
+                        output_dir = "output/extracted_json/jd"
+                        os.makedirs(output_dir, exist_ok=True)
+                        safe_name = re.sub(r'[^A-Za-z0-9_.-]', '_', key)
 
-                    save_path = os.path.join(output_dir, f"jd_final_{safe_name}.json")
-                    jd_final = {
-                        "required_experience_years": int(required_experience_years),
-                        "required_education": required_education.strip(),
-                        "skills": updated_skills
-                    }
+                        save_path = os.path.join(output_dir, f"jd_final_{safe_name}.json")
+                        jd_final = {
+                            "required_experience_years": int(required_experience_years),
+                            "required_education": required_education.strip(),
+                            "skills": updated_skills
+                        }
 
-                    with open(save_path, "w", encoding="utf-8") as f:
-                        json.dump(jd_final, f, ensure_ascii=False, indent=4)
+                        with open(save_path, "w", encoding="utf-8") as f:
+                            json.dump(jd_final, f, ensure_ascii=False, indent=4)
 
-                    st.session_state.jd_parsed[key] = jd_final
-                    st.toast("✅ JD information saved successfully!")
+                        st.session_state.jd_parsed[key] = jd_final
+                        st.toast("✅ JD information saved successfully!")
 
             # --- Form riêng để thêm skill mới ---
             st.markdown("---")
@@ -1135,7 +1136,6 @@ if st.session_state.page == 'Filter CVs':
                         st.warning("Please enter a skill name.")
 
 
-
     # 3. Nút bấm để bắt đầu quá trình lọc
     if st.button("Start Filtering CVs"):
         if not jd_file:
@@ -1144,33 +1144,40 @@ if st.session_state.page == 'Filter CVs':
             st.warning("Please upload at least one CV.")
         else:
             with st.spinner("Analyzing and ranking CVs..."):
-                results = rank_with_bm25_and_sbert()
+                results = rank_combined()
                 st.toast("Done ranking CVs!")
 
-                for jd_name, data in results.items():
-                    #st.markdown(f"## 🧾 JD: `{jd_name}`")
+                # === Hiển thị kết quả ===
+                for jd_name, res in results.items():
+                    st.divider()
+                    st.markdown(f"### 🧩 JD: `{jd_name}`")
+
+                    # st.markdown("#### 💡 SBERT rerank results")
+                    # for i, item in enumerate(res["sbert_top"], 1):
+                    #     st.write(f"{i}. **{item['cv_name']}** — SBERT: `{item['semantic_score']}` — Cohere: `{item.get('cohere_relevance_score')}`")
+
+                    st.markdown("#### 🎯 Final Results")
+                    for i, item in enumerate(res["final_top"], 1):
+                        threshold = 75
+                        if item.get('cohere_relevance_score', item['semantic_score']) >= threshold:
+                            st.success(f"🏅 {i}. {item['cv_name']} — Final score: {item.get('cohere_relevance_score', item['semantic_score'])}%")
+                    #Nếu item có trường cohere_relevance_score → dùng giá trị này.
+                    #Nếu không có, nó sẽ lấy item['semantic_score'] làm giá trị thay thế.
+
+                # for jd_name, data in results.items():
+                #     st.markdown(f"## 🧾 JD: `{jd_name}`")
 
                     # === BM25 Results ===
-                    # st.markdown("### 🔍 Top CVs (BM25)")
-                    # for i, (cv_name, score) in enumerate(data["bm25"], 1):
-                    #     st.write(f"{i}. **{cv_name}** — BM25 score: `{score:.3f}`")
+                    # st.markdown("### 🔍 Top CVs theo BM25")
+                    # for i, item in enumerate(data["bm25_top"], 1):
+                    #     st.write(f"{i}. **{item['cv_name']}** — BM25 score: `{item['bm25_score']}`")
 
-                    # # === SBERT Results ===
-                    # st.markdown("### 💡 Top CVs (SBERT Reranking)")
-                    # for i, (cv_name, score) in enumerate(data["sbert"], 1):
-                    #     st.write(f"{i}. **{cv_name}** — Cosine similarity: `{score:.4f}`")
+                    # === SBERT Results ===
+                    # st.markdown("### 💡 Top CVs sau khi Rerank")
+                    # for i, item in enumerate(data["sbert_top"], 1):
+                    #     st.write(f"{i}. **{item['cv_name']}** — SBERT score: `{item['cohere_relevance_score']}`")
 
-                    # === Cohere Results ===
-                    
-
-                    st.markdown("### Top 3 CVs")
-                    for i, (cv_name, score) in enumerate(data["cohere"], 1):
-                        st.write(f"{i}. **{cv_name}** — Relevance score: `{score:.4f}`")
-
-                    st.markdown("---")
-
-
-
+                    # st.markdown("---")
 
 
 
