@@ -39,3 +39,4 @@ def rank_combined(jd_folder="output/extracted_json/jd", cv_folder="output/extrac
         }
 
     return final_results
+

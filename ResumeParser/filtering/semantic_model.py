@@ -1,5 +1,7 @@
 
 import re
+
+from dotenv import load_dotenv
 import torch
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -14,7 +16,13 @@ import streamlit as st
 from sentence_transformers import SentenceTransformer
 app = FastAPI()
 
-co = cohere.Client("hRXMqYqSAknTG7HKrEBNBv1HmsmJCo1eKQB6GTdt")
+load_dotenv()
+
+# Lấy API key từ biến môi trường
+api_key = os.getenv("COHERE_API_KEY")
+
+# Tạo client
+co = cohere.Client(api_key)
 
 # --- Chuẩn hóa skill (đảm bảo luôn ra string sạch) ---
 def normalize_skill(s):
@@ -329,12 +337,6 @@ def rank_with_sbert(jd_folder="output/extracted_json/jd", cv_folder="output/extr
 
 
 
-@app.get("/test-sbert-cohere")
-def test_pipeline():
-    try:
-        res = rank_with_sbert()
-        return JSONResponse(content={"status": "success", "data": res})
-    except Exception as e:
-        return JSONResponse(content={"status": "error", "message": str(e)}, status_code=500)
+
 
 

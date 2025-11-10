@@ -86,24 +86,7 @@ def get_text_from_file(file_bytes: bytes, filename: str, file_role) -> str:
 
     print(f"✅ Extracted text saved to: {output_filename}")
 
-
-    # ----------- Save raw text vào folder output -----------
-    # cv_name = Path(cv_filename).stem
-    # save_dir = Path("output") / cv_name
-    # save_dir.mkdir(parents=True, exist_ok=True)
-    # raw_text_path = save_dir / "raw_text.md"
-    
-    # try:
-    #     with open(raw_text_path, "w", encoding="utf-8") as f:
-    #         f.write("# Processed Text Extracted from CV\n\n")
-    #         f.write("```\n")
-    #         f.write(processed_text.strip()) 
-    #         f.write("\n```")
-    #     print(f"✅ Processed CV text saved to {raw_text_path}")
-    # except Exception as e:
-    #     print(f"⚠️ Could not save processed text: {e}")
-
-    return text.strip()
+    return str(output_filename)
 
 def preprocess_for_easyocr(pil_img):
     img = np.array(pil_img.convert("RGB"))

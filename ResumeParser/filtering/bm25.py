@@ -66,10 +66,3 @@ def rank_with_bm25(jd_folder="output/extracted_json/jd", cv_folder="output/extra
   return results
 
 
-@app.get("/test-bm25")
-def test_bm25_api():
-    try:
-        results = rank_with_bm25()
-        return JSONResponse(content={"status": "success", "data": results})
-    except Exception as e:
-        return JSONResponse(content={"status": "error", "message": str(e)}, status_code=500)
