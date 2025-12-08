@@ -189,7 +189,7 @@ def weighted_embedding_debug(skills_with_weights, model):
     weighted_emb = np.average(embeddings, axis=0, weights=weights)
 
     norm_weights = weights / np.sum(weights)
-
+    print ("Normalized weights:", norm_weights)
     # Tính 2 loại embedding
     unweighted_emb = np.mean(embeddings, axis=0)
     # weighted_emb = np.average(embeddings, axis=0, weights=norm_weights)
@@ -243,6 +243,8 @@ def rank_with_sbert(jd_folder="output/extracted_json/jd", cv_folder="output/extr
             print("Weighted embedding computed: ", weighted_emb, unweighted_emb)
             # 👉 Gọi debug_weight_effect nhưng KHÔNG gọi lại weighted_embedding_debug bên trong
             cv_sample_text = " ".join(map(str, cv_files[0][1].values())).lower()
+
+            print (cv_sample_text)
             # debug_weight_effect(jd_data, cv_sample_text, model, unweighted_emb, weighted_emb)
 
             # Sử dụng embedding có trọng số cho ranking chính

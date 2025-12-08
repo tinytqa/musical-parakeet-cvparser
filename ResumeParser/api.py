@@ -44,7 +44,7 @@ async def extract_text(file: UploadFile = File(...), file_role: str = Form(...))
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
     
-@app.post("/parse/cv") #chưa lưu file ra output
+@app.post("/parse/cv") 
 async def parse_cv(files: list[UploadFile] = File(...)):
     """
     Nhận nhiều file CV đã extract text (.md), parse ra JSON, lưu ra output/extracted_json/cv.
@@ -81,7 +81,7 @@ async def parse_cv(files: list[UploadFile] = File(...)):
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
     
-@app.post("/parse/jd") #chưa lưu file ra output
+@app.post("/parse/jd") 
 async def parse_jd(file: UploadFile = File(...)):
     """
     Nhận file JD đã extract text (.md), parse ra JSON, lưu ra output/extracted_json/jd.
